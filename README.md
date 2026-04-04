@@ -420,7 +420,3 @@ Ortam değişkenleri:
 - [ ] Web UI (opsiyonel)
 
 ---
-
-## Lisans
-
-MIT

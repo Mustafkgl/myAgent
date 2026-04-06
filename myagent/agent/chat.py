@@ -195,18 +195,10 @@ def _ask_via_cli(system: str, history: list[dict], stream_callback=None) -> str:
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, bufsize=1,
             )
-            parts: list[str] = []
+            from myagent import interrupt
             deadline = time.time() + 60
-            assert proc.stdout is not None
-            for line in iter(proc.stdout.readline, ""):
-                parts.append(line)
-                stream_callback(line)
-                if time.time() > deadline:
-                    proc.kill()
-                    return "ACTION: ANSWER\nZaman aşımı."
-            proc.stdout.close()
-            proc.wait()
-            return "".join(parts).strip()
+            output = interrupt.readline_interruptible(proc, stream_callback, deadline)
+            return output.strip() or "ACTION: ANSWER\nZaman aşımı."
         except Exception as exc:
             return f"ACTION: ANSWER\nHata: {exc}"
     else:

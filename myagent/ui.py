@@ -90,12 +90,14 @@ class AgentUI:
 
         Yields a write(text) callable.  Call it with each chunk of output.
         Complete lines are printed immediately in dim grey; the final elapsed
-        time is printed on exit.
+        time is printed on exit.  ESC or Ctrl+C raises Interrupted.
         """
+        from myagent import interrupt
+
         self.console.print(f"\n  [{color}]⊛ {escape(label)}[/]")
         start = time.time()
 
-        pending: list[str] = []   # chars not yet terminated by \\n
+        pending: list[str] = []   # chars not yet terminated by \n
 
         def write(chunk: str) -> None:
             if not chunk:
@@ -117,13 +119,21 @@ class AgentUI:
                 self.console.print(f"    [grey42]{escape(tail)}[/]")
             pending.clear()
 
-        try:
-            yield write
-        finally:
-            _flush()
-            s = int(time.time() - start)
-            elapsed = f"{s // 60}m {s % 60:02d}s" if s >= 60 else f"{s}s"
-            self.console.print(f"  [{C_DIM}]({elapsed})[/]")
+        with interrupt.context():
+            try:
+                yield write
+            except interrupt.Interrupted:
+                _flush()
+                s = int(time.time() - start)
+                elapsed = f"{s // 60}m {s % 60:02d}s" if s >= 60 else f"{s}s"
+                self.console.print(f"  [{C_ERR}]⊗ İptal edildi[/]  [{C_DIM}]({elapsed})[/]")
+                raise
+            finally:
+                _flush()
+
+        s = int(time.time() - start)
+        elapsed = f"{s // 60}m {s % 60:02d}s" if s >= 60 else f"{s}s"
+        self.console.print(f"  [{C_DIM}]({elapsed})[/]")
 
     # ── Planning ─────────────────────────────────────────────────────────────
 

@@ -204,28 +204,13 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
             )
         except FileNotFoundError:
             raise RuntimeError("`claude` komutu bulunamadı. Claude Code kurulu mu?")
-        parts: list[str] = []
+        from myagent import interrupt
         deadline = time.time() + 120
-        try:
-            assert proc.stdout is not None
-            for line in iter(proc.stdout.readline, ""):
-                parts.append(line)
-                stream_callback(line)
-                if time.time() > deadline:
-                    proc.kill()
-                    raise RuntimeError("Claude CLI zaman aşımına uğradı (120 s).")
-            proc.stdout.close()
-            stderr = proc.stderr.read() if proc.stderr else ""
-            proc.wait()
-        except Exception:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-            raise
-        if proc.returncode != 0:
+        output = interrupt.readline_interruptible(proc, stream_callback, deadline)
+        stderr = proc.stderr.read() if proc.stderr else ""
+        if proc.returncode not in (0, None):
             raise RuntimeError(f"Claude CLI hata (kod {proc.returncode}):\n{stderr.strip()}")
-        return "".join(parts)
+        return output
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)

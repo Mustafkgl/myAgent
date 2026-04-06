@@ -260,20 +260,12 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
                 proc = subprocess.Popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
                 )
-                parts: list[str] = []
+                from myagent import interrupt
                 deadline = time.time() + 120
-                assert proc.stdout is not None
-                for line in iter(proc.stdout.readline, ""):
-                    parts.append(line)
-                    stream_callback(line)
-                    if time.time() > deadline:
-                        proc.kill()
-                        return "APPROVED"
-                proc.stdout.close()
-                proc.wait()
-                if proc.returncode != 0:
+                output = interrupt.readline_interruptible(proc, stream_callback, deadline)
+                if proc.returncode not in (0, None):
                     return "APPROVED"
-                return "".join(parts).strip()
+                return output.strip()
             else:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 if result.returncode != 0:

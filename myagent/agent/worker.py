@@ -219,31 +219,15 @@ def _gemini_cli_stream(full_prompt: str, callback) -> str:
     except FileNotFoundError:
         raise RuntimeError("`gemini` komutu bulunamadı.")
 
-    output_parts: list[str] = []
+    from myagent import interrupt
     deadline = time.time() + 600
-    try:
-        assert proc.stdout is not None
-        for line in iter(proc.stdout.readline, ""):
-            output_parts.append(line)
-            callback(line)
-            if time.time() > deadline:
-                proc.kill()
-                raise RuntimeError("Gemini CLI zaman aşımına uğradı.")
-        proc.stdout.close()
-        stderr = proc.stderr.read() if proc.stderr else ""
-        proc.wait()
-    except Exception:
-        try:
-            proc.kill()
-        except OSError:
-            pass
-        raise
-
-    if proc.returncode != 0:
+    output = interrupt.readline_interruptible(proc, callback, deadline)
+    stderr = proc.stderr.read() if proc.stderr else ""
+    if proc.returncode not in (0, None):
         raise RuntimeError(
             f"Gemini CLI hata (kod {proc.returncode}):\n{stderr.strip()[:300]}"
         )
-    return "".join(output_parts)
+    return output
 
 
 def _gemini_flag(prompt: str, model: str = ""):
@@ -301,30 +285,15 @@ def _claude_run(full_prompt: str, stream_callback=None) -> str:
             )
         except FileNotFoundError:
             raise RuntimeError("`claude` komutu bulunamadı.")
-        parts: list[str] = []
+        from myagent import interrupt
         deadline = time.time() + 180
-        try:
-            assert proc.stdout is not None
-            for line in iter(proc.stdout.readline, ""):
-                parts.append(line)
-                stream_callback(line)
-                if time.time() > deadline:
-                    proc.kill()
-                    raise RuntimeError("Claude worker CLI zaman aşımına uğradı.")
-            proc.stdout.close()
-            stderr = proc.stderr.read() if proc.stderr else ""
-            proc.wait()
-        except Exception:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-            raise
-        if proc.returncode != 0:
+        output = interrupt.readline_interruptible(proc, stream_callback, deadline)
+        stderr = proc.stderr.read() if proc.stderr else ""
+        if proc.returncode not in (0, None):
             raise RuntimeError(
                 f"Claude worker CLI hata (kod {proc.returncode}):\n{stderr.strip()}"
             )
-        return "".join(parts)
+        return output
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)

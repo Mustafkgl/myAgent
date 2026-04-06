@@ -755,9 +755,13 @@ def _repl(
     while True:
         try:
             raw = input("\033[1;35mmyagent\033[0m \033[35m❯\033[0m ").strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print("\nGoodbye.")
             break
+        except KeyboardInterrupt:
+            # Ctrl+C on the prompt — clear line, continue
+            print()
+            continue
 
         if not raw:
             continue
@@ -770,58 +774,71 @@ def _repl(
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if cmd in ("exit", "quit", "çıkış", "cikis"):
-            print("Goodbye.")
-            break
+        try:
+            if cmd in ("exit", "quit", "çıkış", "cikis"):
+                print("Goodbye.")
+                break
 
-        elif cmd in ("help", "yardım", "yardim"):
-            _print_help()
+            elif cmd in ("help", "yardım", "yardim"):
+                _print_help()
 
-        elif cmd == "run":
-            _handle_run(arg, session=session, **_run_kwargs)
+            elif cmd == "run":
+                _handle_run(arg, session=session, **_run_kwargs)
 
-        elif cmd in ("devam", "continue") or raw.lower() == "devam et":
-            resolved, ctx = session.resolve("devam")
-            _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
+            elif cmd in ("devam", "continue") or raw.lower() == "devam et":
+                resolved, ctx = session.resolve("devam")
+                _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-        elif cmd in ("düzelt", "duzeltle", "fix", "düzeltle"):
-            resolved, ctx = session.resolve("düzelt")
-            _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
+            elif cmd in ("düzelt", "duzeltle", "fix", "düzeltle"):
+                resolved, ctx = session.resolve("düzelt")
+                _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-        elif raw.lower() in ("test ekle", "testler yaz", "add tests"):
-            resolved, ctx = session.resolve("test ekle")
-            _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
+            elif raw.lower() in ("test ekle", "testler yaz", "add tests"):
+                resolved, ctx = session.resolve("test ekle")
+                _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-        elif cmd in ("geçmiş", "gecmis", "history", "hist"):
-            _show_history(arg)
+            elif cmd in ("geçmiş", "gecmis", "history", "hist"):
+                _show_history(arg)
 
-        elif cmd in ("son", "last"):
-            _show_last(session)
+            elif cmd in ("son", "last"):
+                _show_last(session)
 
-        elif cmd in ("temizle", "clean", "clear-workspace"):
-            _clean_workspace(arg)
+            elif cmd in ("temizle", "clean", "clear-workspace"):
+                _clean_workspace(arg)
 
-        elif cmd in ("dosyalar", "files", "ls"):
-            _show_workspace_files()
+            elif cmd in ("dosyalar", "files", "ls"):
+                _show_workspace_files()
 
-        elif cmd == "setup":
-            from myagent.setup_wizard import run_wizard
-            run_wizard()
+            elif cmd == "setup":
+                from myagent.setup_wizard import run_wizard
+                run_wizard()
 
-        elif cmd in ("models", "list-models"):
-            _show_models()
+            elif cmd in ("models", "list-models"):
+                _show_models()
 
-        elif cmd in ("config", "cfg"):
-            _show_config()
+            elif cmd in ("config", "cfg"):
+                _show_config()
 
-        elif cmd in ("clear", "cls"):
-            import os
-            os.system("clear")
-            _print_banner()
+            elif cmd in ("clear", "cls"):
+                import os
+                os.system("clear")
+                _print_banner()
 
-        else:
-            # ── Natural language — route through Chat ────────────────────────
-            _handle_chat(raw, session=session, **_run_kwargs)
+            else:
+                # ── Natural language — route through Chat ────────────────────────
+                _handle_chat(raw, session=session, **_run_kwargs)
+
+        except SystemExit:
+            raise
+        except BaseException as exc:
+            from myagent.interrupt import Interrupted
+            if isinstance(exc, Interrupted):
+                # ESC/Ctrl+C during model call — message already printed by streaming()
+                pass
+            elif isinstance(exc, KeyboardInterrupt):
+                print()
+            else:
+                raise
 
 
 # ---------------------------------------------------------------------------

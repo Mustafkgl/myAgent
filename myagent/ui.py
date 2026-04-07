@@ -146,21 +146,22 @@ class AgentUI:
                 self.console.print(f"    [grey42]{escape(tail)}[/]")
             pending.clear()
 
-        with interrupt.context():
-            try:
-                with Live(status, console=self.console, refresh_per_second=10, transient=True):
-                    try:
-                        yield write
-                    except interrupt.Interrupted:
-                        _flush()
-                        raise
-                    finally:
-                        _flush()
-            except interrupt.Interrupted:
-                secs = int(time.time() - start)
-                e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
-                self.console.print(f"  [{C_ERR}]⊗ İptal edildi[/]  [{C_DIM}]({e})[/]")
-                raise
+        # interrupt.context() is managed at the REPL level (cli.py) so ESC is
+        # detected across the entire command, not just during streaming calls.
+        try:
+            with Live(status, console=self.console, refresh_per_second=10, transient=True):
+                try:
+                    yield write
+                except interrupt.Interrupted:
+                    _flush()
+                    raise
+                finally:
+                    _flush()
+        except interrupt.Interrupted:
+            secs = int(time.time() - start)
+            e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+            self.console.print(f"  [{C_ERR}]⊗ İptal edildi[/]  [{C_DIM}]({e})[/]")
+            raise
 
         secs = int(time.time() - start)
         e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
@@ -295,12 +296,22 @@ class AgentUI:
     # ── Chat answer display ──────────────────────────────────────────────────
 
     def chat_answer(self, text: str) -> None:
-        """Render a conversational answer — no box borders so resize never breaks it."""
+        """Render a conversational answer.
+
+        Panel is capped at 76 cols so it fits comfortably in most terminal sizes
+        without box-drawing characters wrapping and breaking on resize.
+        """
         from rich.markdown import Markdown
-        from rich.padding import Padding
+        w = min(self.console.width, 76)
         self.console.print()
-        self.console.print(f"  [{C_CLAUDE}]Claude[/]  [{C_DIM}]{'─' * 32}[/]")
-        self.console.print(Padding(Markdown(text), (0, 4)))
+        self.console.print(Panel(
+            Markdown(text),
+            title=f"[{C_CLAUDE}]Claude[/]",
+            title_align="left",
+            border_style=C_CLAUDE,
+            padding=(1, 2),
+            width=w,
+        ))
         self.console.print()
 
     # ── Raw model output (verbose) ────────────────────────────────────────────

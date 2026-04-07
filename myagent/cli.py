@@ -665,6 +665,83 @@ def _handle_chat(
         )
 
 
+def _handle_devam(session: "SessionState", run_kwargs: dict) -> None:
+    """Show a numbered menu of recent tasks and continue the selected one."""
+    from myagent.memory.history import load_recent
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    console = Console()
+
+    # Build candidate list: current session first, then history (skip duplicates)
+    candidates: list[tuple[str, str, str]] = []  # (label, task, context_hint)
+
+    if session.last_task:
+        candidates.append(("Bu oturum", session.last_task, ""))
+
+    seen = {session.last_task}
+    for rec in load_recent(8):
+        task = rec.get("task", "").strip()
+        if not task or task in seen:
+            continue
+        seen.add(task)
+        ts = rec.get("timestamp", "")[:16].replace("T", " ")
+        candidates.append((ts, task, ""))
+
+    if not candidates:
+        console.print("\n  [dim]Henüz tamamlanmış görev yok.[/]\n")
+        return
+
+    # Render selection table
+    t = Table.grid(padding=(0, 2))
+    t.add_column(style="bold dodger_blue1", min_width=3)
+    t.add_column(style="dim", min_width=14)
+    t.add_column(style="white")
+    for i, (label, task, _) in enumerate(candidates, 1):
+        t.add_row(f"[{i}]", label, task[:70] + ("…" if len(task) > 70 else ""))
+
+    w = min(console.width, 76)
+    console.print()
+    console.print(Panel(
+        t,
+        title="[bold dodger_blue1]/devam — hangi göreve devam edelim?[/]",
+        title_align="left",
+        border_style="dodger_blue1",
+        padding=(0, 1),
+        width=w,
+    ))
+    console.print(f"  [dim]Seç (1–{len(candidates)}) veya Enter = 1, q = iptal:[/] ", end="")
+
+    try:
+        choice = input().strip()
+    except (EOFError, KeyboardInterrupt):
+        console.print()
+        return
+
+    if choice == "" :
+        idx = 0
+    elif choice.lower() in ("q", "quit", "iptal"):
+        return
+    elif choice.isdigit() and 1 <= int(choice) <= len(candidates):
+        idx = int(choice) - 1
+    else:
+        console.print("  [dim]Geçersiz seçim.[/]")
+        return
+
+    _, task, ctx = candidates[idx]
+    resolved, extra_ctx = session.resolve(task) if session.last_result else (task, "")
+    combined_ctx = "\n".join(filter(None, [ctx, extra_ctx]))
+
+    _handle_run(
+        resolved,
+        session=session,
+        session_context=combined_ctx,
+        **run_kwargs,
+    )
+
+
 def _show_workspace_files() -> None:
     """List files in WORK_DIR with their owning task."""
     from myagent.config.settings import WORK_DIR
@@ -753,6 +830,8 @@ def _repl(
         max_completion_rounds=max_completion_rounds,
     )
 
+    from myagent import interrupt as _interrupt
+
     while True:
         try:
             raw = input("\033[1;35mmyagent\033[0m \033[35m❯\033[0m ").strip()
@@ -760,7 +839,6 @@ def _repl(
             print("\nGoodbye.")
             break
         except KeyboardInterrupt:
-            # Ctrl+C on the prompt — clear line, continue
             print()
             continue
 
@@ -777,71 +855,69 @@ def _repl(
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        try:
-            if cmd in ("exit", "quit", "çıkış", "cikis"):
-                print("Goodbye.")
-                break
+        # Wrap entire command in interrupt context so ESC is detected across
+        # all steps of a pipeline, not only inside individual streaming calls.
+        with _interrupt.context():
+            try:
+                if cmd in ("exit", "quit", "çıkış", "cikis"):
+                    print("Goodbye.")
+                    break
 
-            elif cmd in ("help", "yardım", "yardim"):
-                _print_help()
+                elif cmd in ("help", "yardım", "yardim"):
+                    _print_help()
 
-            elif cmd == "run":
-                _handle_run(arg, session=session, **_run_kwargs)
+                elif cmd == "run":
+                    _handle_run(arg, session=session, **_run_kwargs)
 
-            elif cmd in ("devam", "continue") or raw.lower() == "devam et":
-                resolved, ctx = session.resolve("devam")
-                _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
+                elif cmd in ("devam", "continue") or raw.lower() == "devam et":
+                    _handle_devam(session, _run_kwargs)
 
-            elif cmd in ("düzelt", "duzeltle", "fix", "düzeltle"):
-                resolved, ctx = session.resolve("düzelt")
-                _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
+                elif cmd in ("düzelt", "duzeltle", "fix", "düzeltle"):
+                    resolved, ctx = session.resolve("düzelt")
+                    _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-            elif raw.lower() in ("test ekle", "testler yaz", "add tests"):
-                resolved, ctx = session.resolve("test ekle")
-                _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
+                elif raw.lower() in ("test ekle", "testler yaz", "add tests"):
+                    resolved, ctx = session.resolve("test ekle")
+                    _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-            elif cmd in ("geçmiş", "gecmis", "history", "hist"):
-                _show_history(arg)
+                elif cmd in ("geçmiş", "gecmis", "history", "hist"):
+                    _show_history(arg)
 
-            elif cmd in ("son", "last"):
-                _show_last(session)
+                elif cmd in ("son", "last"):
+                    _show_last(session)
 
-            elif cmd in ("temizle", "clean", "clear-workspace"):
-                _clean_workspace(arg)
+                elif cmd in ("temizle", "clean", "clear-workspace"):
+                    _clean_workspace(arg)
 
-            elif cmd in ("dosyalar", "files", "ls"):
-                _show_workspace_files()
+                elif cmd in ("dosyalar", "files", "ls"):
+                    _show_workspace_files()
 
-            elif cmd == "setup":
-                from myagent.setup_wizard import run_wizard
-                run_wizard()
+                elif cmd == "setup":
+                    from myagent.setup_wizard import run_wizard
+                    run_wizard()
 
-            elif cmd in ("models", "list-models"):
-                _show_models()
+                elif cmd in ("models", "list-models"):
+                    _show_models()
 
-            elif cmd in ("config", "cfg"):
-                _show_config()
+                elif cmd in ("config", "cfg"):
+                    _show_config()
 
-            elif cmd in ("clear", "cls"):
-                import os
-                os.system("clear")
-                _print_banner()
+                elif cmd in ("clear", "cls"):
+                    import os
+                    os.system("clear")
+                    _print_banner()
 
-            else:
-                # ── Natural language — route through Chat ────────────────────────
-                _handle_chat(raw, session=session, **_run_kwargs)
+                else:
+                    _handle_chat(raw, session=session, **_run_kwargs)
 
-        except SystemExit:
-            raise
-        except BaseException as exc:
-            from myagent.interrupt import Interrupted
-            if isinstance(exc, Interrupted):
-                # ESC/Ctrl+C during model call — message already printed by streaming()
-                pass
-            elif isinstance(exc, KeyboardInterrupt):
-                print()
-            else:
+            except SystemExit:
                 raise
+            except _interrupt.Interrupted:
+                pass  # cancel message already printed by streaming()
+            except KeyboardInterrupt:
+                print()
+            except Exception as exc:
+                print(f"  Hata: {exc}")
 
 
 # ---------------------------------------------------------------------------

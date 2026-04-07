@@ -42,7 +42,13 @@ def clear() -> None:
 
 @contextmanager
 def context():
-    """Context manager that activates the ESC watcher and clears state on exit."""
+    """Start ESC watcher for the duration of a command.
+
+    Clears the event on entry.  On exit the watcher stops but the event is
+    intentionally NOT cleared — so an ESC pressed between two streaming calls
+    (both inside the same outer context) is still seen by the next call.
+    Call clear() explicitly after catching Interrupted if you want to reset.
+    """
     clear()
     watcher = _EscWatcher()
     watcher.start()
@@ -50,7 +56,6 @@ def context():
         yield
     finally:
         watcher.stop()
-        clear()
 
 
 def readline_interruptible(

@@ -26,7 +26,6 @@ from rich.live import Live
 from rich.markup import escape
 from rich.panel import Panel
 from rich.rule import Rule
-from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
@@ -44,6 +43,29 @@ C_ERR     = "red1"
 C_DIM     = "grey50"
 C_RUFF    = "cyan2"
 C_TASK    = "bold white"
+
+_SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+def _live_status(label: str, color: str, start: float, tokens: list):
+    """Rich renderable: spinner + label + elapsed + token count.
+    Called by Live on every refresh — auto-updates time and spinner frame.
+    """
+    class _R:
+        def __rich__(self_r) -> Text:
+            elapsed = time.time() - start
+            secs = int(elapsed)
+            e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+            ch = _SPIN[int(elapsed * 10) % len(_SPIN)]
+            parts: list = [
+                (f"  {ch} ", color),
+                (label, f"bold {color}"),
+                (f"   {e}", "dim"),
+            ]
+            if tokens[0]:
+                parts.append((f"  ↓ {tokens[0]:,}", "dim"))
+            return Text.assemble(*parts)
+    return _R()
 
 
 class AgentUI:
@@ -76,42 +98,47 @@ class AgentUI:
 
     @contextmanager
     def spinner(self, label: str, color: str = C_DIM):
-        spin = Spinner("dots", text=Text(f" {label}", style=color))
-        with Live(spin, console=self.console, refresh_per_second=12, transient=True):
+        start = time.time()
+        tokens: list[int] = [0]
+        status = _live_status(label, color, start, tokens)
+        with Live(status, console=self.console, refresh_per_second=10, transient=True):
             yield
-        # Print a static "done" line after spinner exits
-        self.console.print(f"  [{C_DIM}]↳ {label}[/]  [{C_DIM}]{self._elapsed()}[/]")
+        secs = int(time.time() - start)
+        e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+        self.console.print(f"  [{C_DIM}]↳ {escape(label)}[/]  [{C_DIM}]{e}[/]")
 
     # ── Streaming context manager (model calls: Gemini / Claude) ────────────
 
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
-        """Real-time streaming display — shows model output as it arrives.
+        """Live streaming display with resize-responsive status bar.
 
-        Yields a write(text) callable.  Call it with each chunk of output.
-        Complete lines are printed immediately in dim grey; the final elapsed
-        time is printed on exit.  ESC or Ctrl+C raises Interrupted.
+        Yields a write(text) callable. Streamed lines are printed to the
+        console (scrollback); a live status bar at the bottom shows the
+        operation label, elapsed time, and estimated token count. The bar
+        updates at 10 fps and redraws on terminal resize automatically.
+        ESC or Ctrl+C raises Interrupted.
         """
         from myagent import interrupt
 
-        self.console.print(f"\n  [{color}]⊛ {escape(label)}[/]")
         start = time.time()
-
-        pending: list[str] = []   # chars not yet terminated by \n
+        pending: list[str] = []
+        tokens: list[int] = [0]
+        status = _live_status(label, color, start, tokens)
 
         def write(chunk: str) -> None:
             if not chunk:
                 return
+            tokens[0] += max(1, len(chunk) // 4)
             pending.append(chunk)
             text = "".join(pending)
             parts = text.split("\n")
-            # All but the last part are complete lines
             for line in parts[:-1]:
                 s = line.rstrip()
                 if s:
                     self.console.print(f"    [grey42]{escape(s)}[/]")
             pending.clear()
-            pending.append(parts[-1])   # keep the dangling tail
+            pending.append(parts[-1])
 
         def _flush() -> None:
             tail = "".join(pending).rstrip()
@@ -121,19 +148,24 @@ class AgentUI:
 
         with interrupt.context():
             try:
-                yield write
+                with Live(status, console=self.console, refresh_per_second=10, transient=True):
+                    try:
+                        yield write
+                    except interrupt.Interrupted:
+                        _flush()
+                        raise
+                    finally:
+                        _flush()
             except interrupt.Interrupted:
-                _flush()
-                s = int(time.time() - start)
-                elapsed = f"{s // 60}m {s % 60:02d}s" if s >= 60 else f"{s}s"
-                self.console.print(f"  [{C_ERR}]⊗ İptal edildi[/]  [{C_DIM}]({elapsed})[/]")
+                secs = int(time.time() - start)
+                e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+                self.console.print(f"  [{C_ERR}]⊗ İptal edildi[/]  [{C_DIM}]({e})[/]")
                 raise
-            finally:
-                _flush()
 
-        s = int(time.time() - start)
-        elapsed = f"{s // 60}m {s % 60:02d}s" if s >= 60 else f"{s}s"
-        self.console.print(f"  [{C_DIM}]({elapsed})[/]")
+        secs = int(time.time() - start)
+        e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+        tc = f"  [{C_DIM}]↓ {tokens[0]:,}[/]" if tokens[0] else ""
+        self.console.print(f"  [{C_DIM}]({e})[/]{tc}")
 
     # ── Planning ─────────────────────────────────────────────────────────────
 

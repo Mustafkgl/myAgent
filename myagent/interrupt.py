@@ -56,6 +56,9 @@ def context():
         yield
     finally:
         watcher.stop()
+        # Join so the watcher thread has time to restore terminal settings
+        # (tcsetattr) before we return and any subsequent output is written.
+        watcher.join(timeout=0.2)
 
 
 def readline_interruptible(
@@ -120,7 +123,9 @@ class _EscWatcher(threading.Thread):
             tty_f = open("/dev/tty", "rb", buffering=0)
             fd = tty_f.fileno()
             old = termios.tcgetattr(fd)
-            tty.setraw(fd)
+            # setcbreak keeps OPOST (output processing) active so \n still
+            # acts as \r\n on stdout — setraw would break terminal output.
+            tty.setcbreak(fd)
             try:
                 while not self._stop_event.is_set() and not _event.is_set():
                     r, _, _ = select.select([tty_f], [], [], 0.05)

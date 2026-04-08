@@ -296,17 +296,21 @@ class AgentUI:
     # ── Chat answer display ──────────────────────────────────────────────────
 
     def chat_answer(self, text: str) -> None:
+        import io, os, sys
         from rich.markdown import Markdown
-        import os
         try:
             term_w = os.get_terminal_size().columns
         except OSError:
-            term_w = self.console.width
+            term_w = 80
         w = min(term_w, 76)
-        # Use a narrow Console so Markdown (incl. code blocks) renders at width w.
-        # self.console.width inside Docker can be 200+ even if the visible terminal
-        # is narrow, causing code blocks to overflow Panel borders on screen wrap.
-        con = Console(width=w, highlight=False)
+        # Render entirely into a StringIO buffer at width=w so Markdown code blocks
+        # and the Panel borders are ALL constrained to w chars regardless of what
+        # the Docker PTY reports as its width.
+        buf = io.StringIO()
+        con = Console(
+            file=buf, width=w, highlight=False,
+            force_terminal=True, color_system="truecolor",
+        )
         con.print()
         con.print(Panel(
             Markdown(text),
@@ -316,6 +320,8 @@ class AgentUI:
             padding=(1, 2),
         ))
         con.print()
+        sys.stdout.write(buf.getvalue())
+        sys.stdout.flush()
 
     # ── Raw model output (verbose) ────────────────────────────────────────────
 

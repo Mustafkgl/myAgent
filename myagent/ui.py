@@ -296,23 +296,26 @@ class AgentUI:
     # ── Chat answer display ──────────────────────────────────────────────────
 
     def chat_answer(self, text: str) -> None:
-        """Render a conversational answer.
-
-        Panel is capped at 76 cols so it fits comfortably in most terminal sizes
-        without box-drawing characters wrapping and breaking on resize.
-        """
         from rich.markdown import Markdown
-        w = min(self.console.width, 76)
-        self.console.print()
-        self.console.print(Panel(
+        import os
+        try:
+            term_w = os.get_terminal_size().columns
+        except OSError:
+            term_w = self.console.width
+        w = min(term_w, 76)
+        # Use a narrow Console so Markdown (incl. code blocks) renders at width w.
+        # self.console.width inside Docker can be 200+ even if the visible terminal
+        # is narrow, causing code blocks to overflow Panel borders on screen wrap.
+        con = Console(width=w, highlight=False)
+        con.print()
+        con.print(Panel(
             Markdown(text),
             title=f"[{C_CLAUDE}]Claude[/]",
             title_align="left",
             border_style=C_CLAUDE,
             padding=(1, 2),
-            width=w,
         ))
-        self.console.print()
+        con.print()
 
     # ── Raw model output (verbose) ────────────────────────────────────────────
 

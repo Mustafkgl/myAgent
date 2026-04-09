@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from myagent.agent.chat import Chat
     from myagent.agent.pipeline import RunResult
+    from myagent.ui import AgentUI
 
 __version__ = "1.0.0"
 
@@ -62,7 +63,8 @@ class SessionState:
     last_result: "RunResult | None" = None
     last_task: str = ""
     run_count: int = 0
-    chat: "Chat | None" = None  # lazily initialised in REPL
+    chat: "Chat | None" = None
+    ui: "AgentUI | None" = None  # persistent UI — holds Live panel between turns
 
     # ── Pronoun / continuation resolution ───────────────────────────────────
 
@@ -630,7 +632,9 @@ def _handle_chat(
     if session.chat is None:
         session.chat = Chat()
 
-    ui = make_ui(verbose=verbose)
+    if session.ui is None:
+        session.ui = make_ui(verbose=verbose)
+    ui = session.ui
 
     # Use spinner (no raw streaming) — avoids leaking routing metadata to screen
     with ui.spinner("Claude düşünüyor…", color="medium_purple1"):
@@ -833,6 +837,9 @@ def _repl(
     from myagent import interrupt as _interrupt
 
     while True:
+        # Commit any Live panel before showing the prompt
+        if session.ui is not None:
+            session.ui.stop_live()
         try:
             raw = input("\033[1;35mmyagent\033[0m \033[35m❯\033[0m ").strip()
         except EOFError:

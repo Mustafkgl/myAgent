@@ -73,6 +73,24 @@ class AgentUI:
         self.console = Console(highlight=False)
         self.verbose = verbose
         self._t0 = time.time()
+        self._live: "Live | None" = None
+        self._live_sigwinch = None
+
+    def stop_live(self) -> None:
+        """Commit any active chat_answer Live display. Call before input()."""
+        import signal
+        if self._live is not None:
+            try:
+                self._live.stop()
+            except Exception:
+                pass
+            self._live = None
+        if self._live_sigwinch is not None:
+            try:
+                signal.signal(signal.SIGWINCH, self._live_sigwinch)
+            except Exception:
+                pass
+            self._live_sigwinch = None
 
     # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -296,21 +314,46 @@ class AgentUI:
     # ── Chat answer display ──────────────────────────────────────────────────
 
     def chat_answer(self, text: str) -> None:
+        """Render answer in a Live panel that re-renders on terminal resize.
+
+        The panel stays "live" (responsive to SIGWINCH) until stop_live() is
+        called — which the REPL does just before the next input() prompt.
+        """
+        import signal
         from rich.markdown import Markdown
-        # Cap at 120 cols: looks good on wide terminals, stays intact when
-        # user resizes to ~half-screen. Scrollback content can't reflow so
-        # full-terminal-width panels break if the terminal is later narrowed.
-        w = min(self.console.width, 120)
-        self.console.print()
-        self.console.print(Panel(
-            Markdown(text),
-            title=f"[{C_CLAUDE}]Claude[/]",
-            title_align="left",
-            border_style=C_CLAUDE,
-            padding=(1, 2),
-            width=w,
-        ))
-        self.console.print()
+        from rich.padding import Padding
+
+        self.stop_live()
+
+        def _make() -> Padding:
+            w = min(self.console.width, 120)
+            return Padding(Panel(
+                Markdown(text),
+                title=f"[{C_CLAUDE}]Claude[/]",
+                title_align="left",
+                border_style=C_CLAUDE,
+                padding=(1, 2),
+                width=w,
+            ), (1, 0))
+
+        live = Live(
+            _make(),
+            console=self.console,
+            refresh_per_second=0,
+            transient=False,
+            auto_refresh=False,
+        )
+        live.start(refresh=True)
+        self._live = live
+
+        def _on_resize(sig, frame):
+            if self._live is not None:
+                try:
+                    self._live.update(_make(), refresh=True)
+                except Exception:
+                    pass
+
+        self._live_sigwinch = signal.signal(signal.SIGWINCH, _on_resize)
 
     # ── Raw model output (verbose) ────────────────────────────────────────────
 

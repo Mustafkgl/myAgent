@@ -296,32 +296,16 @@ class AgentUI:
     # ── Chat answer display ──────────────────────────────────────────────────
 
     def chat_answer(self, text: str) -> None:
-        import io, os, sys
         from rich.markdown import Markdown
-        try:
-            term_w = os.get_terminal_size().columns
-        except OSError:
-            term_w = 80
-        w = min(term_w, 76)
-        # Render entirely into a StringIO buffer at width=w so Markdown code blocks
-        # and the Panel borders are ALL constrained to w chars regardless of what
-        # the Docker PTY reports as its width.
-        buf = io.StringIO()
-        con = Console(
-            file=buf, width=w, highlight=False,
-            force_terminal=True, color_system="truecolor",
-        )
-        con.print()
-        con.print(Panel(
+        self.console.print()
+        self.console.print(Panel(
             Markdown(text),
             title=f"[{C_CLAUDE}]Claude[/]",
             title_align="left",
             border_style=C_CLAUDE,
             padding=(1, 2),
         ))
-        con.print()
-        sys.stdout.write(buf.getvalue())
-        sys.stdout.flush()
+        self.console.print()
 
     # ── Raw model output (verbose) ────────────────────────────────────────────
 

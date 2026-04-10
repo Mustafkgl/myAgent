@@ -339,7 +339,7 @@ class AgentUI:
         live = Live(
             _make(),
             console=self.console,
-            refresh_per_second=0,
+            refresh_per_second=4,
             transient=False,
             auto_refresh=False,
         )

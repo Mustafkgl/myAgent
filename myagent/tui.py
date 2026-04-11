@@ -127,7 +127,7 @@ class MyAgentApp(App):
     #sidebar {
         width: 30;
         dock: left;
-        border-right: vline $primary;
+        border-right: solid $primary;
         background: $surface;
     }
 
@@ -139,7 +139,7 @@ class MyAgentApp(App):
     #input-container {
         height: 3;
         dock: bottom;
-        border-top: hline $primary;
+        border-top: solid $primary;
         padding: 0 1;
     }
 
@@ -150,7 +150,7 @@ class MyAgentApp(App):
 
     .system-msg {
         color: $text-disabled;
-        font-style: italic;
+        text-style: italic;
     }
     """
 

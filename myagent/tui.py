@@ -127,7 +127,8 @@ class MyAgentApp(App):
     #chat-log {
         height: 1fr;
         padding: 0 2;
-        scrollbar-size: 0 0;
+        scrollbar-size-vertical: 0;
+        scrollbar-size-horizontal: 0;
     }
 
     #input-container {
@@ -138,6 +139,7 @@ class MyAgentApp(App):
     }
 
     Input { border: none; background: $surface; }
+    .input-prompt { color: $primary; text-style: bold; width: 4; }
     """
 
     BINDINGS = [
@@ -171,7 +173,7 @@ class MyAgentApp(App):
         self.chat_log = RichLog(id="chat-log", highlight=True, markup=True)
         yield self.chat_log
         with Horizontal(id="input-container"):
-            yield Label(" ❯ ", variant="bold")
+            yield Label(" ❯ ", classes="input-prompt")
             yield Input(placeholder="Ne yapmamı istersin?", id="user-input")
         yield Footer()
 

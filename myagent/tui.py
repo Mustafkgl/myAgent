@@ -19,9 +19,9 @@ from rich.rule import Rule
 from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, VerticalScroll
 from textual.events import Key
-from textual.widgets import Footer, Header, Input, Label, RichLog
+from textual.widgets import Footer, Header, Input, Label, Static
 
 from myagent.agent.chat import Chat
 from myagent.ui import AgentUI, C_CLAUDE, C_DIM, C_GEMINI, C_OK, C_WARN, C_ERR
@@ -131,6 +131,10 @@ class MyAgentApp(App):
         scrollbar-size-horizontal: 0;
     }
 
+    #chat-log > Static {
+        width: 100%;
+    }
+
     #input-container {
         height: 3;
         dock: bottom;
@@ -170,14 +174,14 @@ class MyAgentApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        self.chat_log = RichLog(id="chat-log", highlight=True, markup=True)
-        yield self.chat_log
+        yield VerticalScroll(id="chat-log")
         with Horizontal(id="input-container"):
             yield Label(" ❯ ", classes="input-prompt")
             yield Input(placeholder="Ne yapmamı istersin?", id="user-input")
         yield Footer()
 
     def on_mount(self) -> None:
+        self.chat_log = self.query_one("#chat-log", VerticalScroll)
         from myagent.config.auth import get_claude_model, get_gemini_model
         self.log_message(Text(_BANNER, style=f"bold {C_CLAUDE}"))
         self.log_message(Text.assemble(
@@ -201,7 +205,8 @@ class MyAgentApp(App):
         self.query_one("#user-input").focus()
 
     def log_message(self, renderable: Any) -> None:
-        self.chat_log.write(renderable)
+        self.chat_log.mount(Static(renderable))
+        self.chat_log.scroll_end(animate=False)
 
     # ── ↑↓ input history ─────────────────────────────────────────────────────
 
@@ -427,7 +432,7 @@ class MyAgentApp(App):
     # ── Actions ───────────────────────────────────────────────────────────────
 
     def action_clear_log(self) -> None:
-        self.chat_log.clear()
+        self.chat_log.remove_children()
 
     def action_copy_last(self) -> None:
         if not self._last_answer:

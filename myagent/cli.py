@@ -943,6 +943,10 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
+    # ── 0. Load persisted API keys from ~/.myagent/.env ──────────────────────
+    from myagent.auth_screen import _load_env_file
+    _load_env_file()
+
     # ── 1. Apply runtime overrides from flags ────────────────────────────────
     from myagent.config.auth import apply_overrides
     apply_overrides(

@@ -67,7 +67,7 @@ def _sessions_list() -> list[dict]:
 
 _COMMANDS: list[tuple[str, str]] = [
     ("/about",    "Versiyon bilgileri ve model bilgisi"),
-    ("/auth",     "API anahtarları ve kimlik doğrulama"),
+    ("/auth",     "API anahtarları ve kimlik doğrulama ekranı"),
     ("/clear",    "Ekranı temizle"),
     ("/compact",  "Konuşma geçmişini özetle ve sıkıştır"),
     ("/config",   "Mevcut yapılandırmayı göster"),
@@ -393,7 +393,8 @@ class MyAgentApp(App):
             self._cmd_config()
 
         elif cmd in ("auth", "kimlik", "api"):
-            self._cmd_auth()
+            from myagent.auth_screen import AuthScreen
+            self.app.push_screen(AuthScreen())
 
         elif cmd in ("model",):
             await self._cmd_model(arg)

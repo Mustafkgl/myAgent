@@ -144,12 +144,16 @@ class TuiAgentUI(AgentUI):
 # ---------------------------------------------------------------------------
 
 _BANNER = """\
-  ╔╦╗╦ ╦╔═╗╔═╗╔═╗╔╗╔╔╦╗
-  ║║║╚╦╝╠═╣║ ╦║╣ ║║║ ║
-  ╩ ╩ ╩ ╩ ╩╚═╝╚═╝╝╚╝ ╩"""
+                      ___                    __
+     ____ ___  __  __/   | ____ ____  ____  / /_
+    / __ `__ \\/ / / / /| |/ __ `/ _ \\/ __ \\/ __/
+   / / / / / / /_/ / ___ / /_/ /  __/ / / / /_
+  /_/ /_/ /_/\\__, /_/  |_\\__, /\\___/_/ /_/\\__/
+            /____/      /____/"""
 
 
 class MyAgentApp(App):
+    TITLE = "myAgent"
     CSS = """
     Screen { background: $surface; }
 
@@ -197,6 +201,7 @@ class MyAgentApp(App):
         self._input_history: list[str] = []
         self._hist_pos: int = -1
         self._hist_draft: str = ""
+        self._quit_confirm: bool = False
         self._sid   = str(uuid.uuid4())
         self._sname = datetime.now().strftime("%d %b %Y %H:%M")
         self._msgs: list[dict] = []
@@ -696,6 +701,22 @@ class MyAgentApp(App):
             self.log_message(Text(f"\n  ✗ Hata: {e}\n", style=f"bold {C_ERR}"))
 
     # ── Actions ───────────────────────────────────────────────────────────────
+
+    def action_quit(self) -> None:
+        if self._quit_confirm:
+            self._autosave()
+            self.exit()
+        else:
+            self._quit_confirm = True
+            self.notify(
+                "Çıkmak için tekrar Ctrl+C yapın.",
+                severity="warning",
+                timeout=3,
+            )
+            self.set_timer(3, self._reset_quit_confirm)
+
+    def _reset_quit_confirm(self) -> None:
+        self._quit_confirm = False
 
     def action_clear_log(self) -> None:
         self.chat_log.remove_children()

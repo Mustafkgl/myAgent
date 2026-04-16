@@ -233,6 +233,8 @@ class AuthScreen(Screen):
         _radio_select(self.query_one("#worker-radio", RadioSet), worker_idx)
         self._refresh_claude_ui(self._current_claude_mode)
         self._refresh_worker_ui(self._current_worker_mode)
+        # Auto-focus the first RadioSet so arrow keys work immediately
+        self.query_one("#claude-radio", RadioSet).focus()
 
     # ── Radio change handlers ─────────────────────────────────────────────────
 

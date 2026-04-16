@@ -121,6 +121,7 @@ class AuthScreen(Screen):
     }
 
     .auth-subtitle { margin-bottom: 1; }
+    .auth-nav-hint { color: $text-muted; margin-bottom: 1; }
 
     RadioSet {
         margin: 0 0 1 2;
@@ -155,10 +156,14 @@ class AuthScreen(Screen):
         yield Header()
         with VerticalScroll(id="auth-scroll"):
 
-            yield Static("Kimlik Doğrulama & Bağlantı Ayarları\n", classes="auth-title")
+            yield Static("Kimlik Doğrulama & Bağlantı Ayarları", classes="auth-title")
+            yield Static(
+                "  ↑ ↓ seçenek değiştir  ·  Tab sonraki bölüm  ·  Enter / Kaydet butonu ile kaydet\n",
+                classes="auth-nav-hint",
+            )
 
             # ── Claude (Planner) ──────────────────────────────────────────────
-            yield Static("PLANLAYAN  —  Claude", classes="auth-title")
+            yield Static("PLANLAYAN  —  Claude  [dim]( ↑ ↓ ile seç )[/dim]", classes="auth-title")
             yield Static(
                 "  Aboneliğinle kullan (Claude Code) ya da API key gir (pay-as-you-go)",
                 classes="auth-subtitle",
@@ -180,9 +185,9 @@ class AuthScreen(Screen):
             yield Static("─" * 60, classes="divider")
 
             # ── Worker (Gemini / Claude) ──────────────────────────────────────
-            yield Static("ÇALIŞAN  —  Worker", classes="auth-title")
+            yield Static("ÇALIŞAN  —  Worker  [dim]( ↑ ↓ ile seç )[/dim]", classes="auth-title")
             yield Static(
-                "  Görevleri kimin yürüteceğini seç",
+                "  Görevleri kimin yürüteceğini seç  ·  Tab ile bu bölüme geçin",
                 classes="auth-subtitle",
             )
             with RadioSet(id="worker-radio"):

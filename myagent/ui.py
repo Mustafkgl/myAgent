@@ -92,6 +92,14 @@ class AgentUI:
                 pass
             self._live_sigwinch = None
 
+    def audit_report(self, score: int, summary: str) -> None:
+        color = "green3" if score > 80 else ("yellow3" if score > 50 else "red1")
+        info = Text.assemble(
+            ("\n  Sentinel Denetimi: ", C_DIM), (f"{score}/100", f"bold {color}"),
+            (f"\n  {summary}\n", "dim")
+        )
+        self.console.print(info)
+
     # ── Helpers ─────────────────────────────────────────────────────────────
 
     def _elapsed(self) -> str:
@@ -370,7 +378,9 @@ class AgentUI:
     # ── Summary ──────────────────────────────────────────────────────────────
 
     def summary(self, success: bool, review_approved: bool,
-                n_review_rounds: int, created_files: list[str]) -> None:
+                n_review_rounds: int, created_files: list[str],
+                usage: dict[str, dict[str, int]] = None,
+                audit_score: int | None = None) -> None:
         self.console.print()
         status_icon = f"[{C_OK}]✓[/]" if success else f"[{C_ERR}]✗[/]"
         rev_icon = f"[{C_OK}]✓[/]" if review_approved else f"[{C_WARN}]~[/]"
@@ -386,6 +396,13 @@ class AgentUI:
             cols.add_row(
                 f"[{C_DIM}]Dosyalar:[/] {', '.join(escape(f) for f in created_files)}",
                 f"[{C_DIM}]Süre:[/] {self._elapsed()}",
+            )
+
+        if audit_score is not None:
+            color = "green3" if audit_score > 80 else ("yellow3" if audit_score > 50 else "red1")
+            cols.add_row(
+                f"[{C_DIM}]Sentinel Skoru:[/] [{color}]{audit_score}/100[/]",
+                ""
             )
 
         self.console.print(Panel(
@@ -500,7 +517,10 @@ class NullUI:
         if self.verbose:
             print(f"\n--- {label} ---\n{text}\n")
 
-    def summary(self, success, review_approved, n_review_rounds, created_files):
+    def audit_report(self, score, summary):
+        print(f"  [Sentinel] {score}/100: {summary}")
+
+    def summary(self, success, review_approved, n_review_rounds, created_files, usage=None, audit_score=None):
         status = "Tamamlandı" if success else "Hatalarla tamamlandı"
         print(f"\n{status}. Dosyalar: {', '.join(created_files)}\n")
 

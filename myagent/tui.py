@@ -85,6 +85,7 @@ _COMMANDS: list[tuple[str, str]] = [
     ("/status",   "Oturum istatistiklerini göster"),
     ("/stats",    "Token kullanımı ve maliyet analitiği"),
     ("/telemetry","Canlı token sayacını aç / kapat"),
+    ("/sidebar",  "Yan paneli göster / gizle"),
     ("/theme",    "Temayı değiştir  →  /theme dark|light"),
     ("/think",    "Ayrıntılı çıktı modunu aç / kapat"),
 ]
@@ -130,7 +131,8 @@ class TuiAgentUI(AgentUI):
 
     def summary(self, success: bool, review_approved: bool,
                 n_review_rounds: int, created_files: list[str],
-                usage: dict[str, dict[str, int]] = None) -> None:
+                usage: dict[str, dict[str, int]] = None,
+                audit_score: int | None = None) -> None:
         status = "✓ Tamamlandı" if success else "✗ Hatalarla tamamlandı"
         color = C_OK if success else C_WARN
         self._log(Text(f"\n  {status}\n", style=f"bold {color}"))
@@ -162,6 +164,21 @@ class TuiAgentUI(AgentUI):
                 ("\n", "")
             )
             self._log(info)
+            # Sync to global cumulative usage
+            self.app.cumulative_usage["claude"]["input"] += usage["claude"]["input"]
+            self.app.cumulative_usage["claude"]["output"] += usage["claude"]["output"]
+            self.app.cumulative_usage["gemini"]["input"] += usage["gemini"]["input"]
+            self.app.cumulative_usage["gemini"]["output"] += usage["gemini"]["output"]
+            self.app.update_sidebar()
+
+    def audit_report(self, score: int, summary: str) -> None:
+        color = "green3" if score > 80 else ("yellow3" if score > 50 else "red1")
+        info = Text.assemble(
+            ("\n  Sentinel Denetimi: ", C_DIM), (f"{score}/100", f"bold {color}"),
+            (f"\n  {summary}\n", "dim")
+        )
+        self._log(info)
+        self.app.update_sidebar()
 
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
@@ -195,6 +212,10 @@ class MyAgentApp(App):
     CSS = """
     Screen { background: $surface; }
 
+    #main-container {
+        height: 1fr;
+    }
+
     #chat-log {
         height: 1fr;
         padding: 0 2;
@@ -203,6 +224,20 @@ class MyAgentApp(App):
     }
 
     #chat-log > Static { width: 100%; }
+
+    #sidebar {
+        width: 35;
+        background: $panel;
+        border-left: solid $primary;
+        padding: 1 1;
+        display: block;
+    }
+
+    .sidebar-title { color: $primary; text-style: bold; margin-bottom: 1; }
+    .stat-label { color: $text-disabled; }
+    .stat-value { color: $text; text-style: bold; }
+    .indicator-active { color: #059669; }
+    .indicator-idle { color: $text-disabled; }
 
     #autocomplete {
         display: none;
@@ -253,7 +288,9 @@ class MyAgentApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield VerticalScroll(id="chat-log")
+        with Horizontal(id="main-container"):
+            yield VerticalScroll(id="chat-log")
+            yield Sidebar(id="sidebar")
         yield OptionList(id="autocomplete")
         with Horizontal(id="input-container"):
             yield Label(" ❯ ", classes="input-prompt")
@@ -439,6 +476,9 @@ class MyAgentApp(App):
 
         elif cmd in ("telemetry", "telemetri", "tokens"):
             self._cmd_telemetry()
+
+        elif cmd in ("sidebar", "panel"):
+            self._cmd_sidebar()
 
         elif cmd in ("config", "yapılandırma", "yapilandirma"):
             self._cmd_config()
@@ -873,6 +913,67 @@ class MyAgentApp(App):
             "`Ctrl+Y` kopyala  ·  "
             "`Ctrl+L` temizle  ·  "
             "`F1` yardım\n"
+        ))
+
+    def _cmd_sidebar(self) -> None:
+        sb = self.query_one("#sidebar")
+        sb.display = not sb.display
+        status = "açık" if sb.display else "kapalı"
+        self.log_message(Text(f"  ✓ Yan panel şu an {status}.\n", style=C_OK))
+
+    def update_sidebar(self) -> None:
+        try:
+            sb = self.query_one("#sidebar", Sidebar)
+            sb.update_stats(self.cumulative_usage)
+        except Exception:
+            pass
+
+
+from textual.widgets import Static
+from textual.containers import Vertical
+
+class Sidebar(Vertical):
+    def compose(self) -> ComposeResult:
+        yield Label("MISSION CONTROL", classes="sidebar-title")
+        yield Static(id="sb-models")
+        yield Static(id="sb-tokens")
+        yield Static(id="sb-costs")
+        yield Static(id="sb-health")
+        yield Static("\n[dim]v1.2.0 OMEGA[/]", id="sb-version")
+
+    def on_mount(self) -> None:
+        self.update_stats({"claude": {"input": 0, "output": 0}, "gemini": {"input": 0, "output": 0}})
+
+    def update_stats(self, usage: dict) -> None:
+        from myagent.config.auth import get_claude_model, get_gemini_model
+        from myagent.models import get_model_cost
+        
+        c_model = get_claude_model()
+        g_model = get_gemini_model()
+        
+        c_cost = get_model_cost(c_model, "claude", usage["claude"]["input"], usage["claude"]["output"])
+        g_cost = get_model_cost(g_model, "gemini", usage["gemini"]["input"], usage["gemini"]["output"])
+        
+        self.query_one("#sb-models").update(Text.assemble(
+            ("\nMODELS\n", "bold gray50"),
+            ("◆ ", "medium_purple1"), (f"{c_model[:15]}\n", "white"),
+            ("✦ ", "dodger_blue1"), (f"{g_model[:15]}\n", "white")
+        ))
+        
+        self.query_one("#sb-tokens").update(Text.assemble(
+            ("\nTOKENS\n", "bold gray50"),
+            ("In:  ", "dim"), (f"{usage['claude']['input'] + usage['gemini']['input']}\n", "white"),
+            ("Out: ", "dim"), (f"{usage['claude']['output'] + usage['gemini']['output']}\n", "white")
+        ))
+        
+        self.query_one("#sb-costs").update(Text.assemble(
+            ("\nFINANCIALS\n", "bold gray50"),
+            ("Cost:    ", "dim"), (f"${c_cost + g_cost:.4f}\n", "green3"),
+        ))
+        
+        self.query_one("#sb-health").update(Text.assemble(
+            ("\nSYSTEM\n", "bold gray50"),
+            ("Status:  ", "dim"), ("OPERATIONAL", "green3")
         ))
 
 

@@ -56,6 +56,16 @@ def _build_context() -> str:
     except Exception:
         pass
 
+    # Phase 4: Cognitive Knowledge Hub (lessons learned)
+    try:
+        from myagent.agent.memory import KnowledgeHub
+        kh = KnowledgeHub()
+        lessons = kh.get_context_for_planner()
+        if lessons:
+            parts.append(lessons)
+    except Exception:
+        pass
+
     return "\n\n".join(parts)
 
 

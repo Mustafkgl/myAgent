@@ -9,7 +9,8 @@
 ![Claude](https://img.shields.io/badge/Planner-Claude-c084fc?style=flat-square)
 ![Gemini](https://img.shields.io/badge/Worker-Gemini-4285F4?style=flat-square)
 ![Telemetry](https://img.shields.io/badge/Telemetry-Integrated-059669?style=flat-square)
-![Cost](https://img.shields.io/badge/Cost-Tracked-059669?style=flat-square)
+![Audit](https://img.shields.io/badge/Audit-Sentinel%20v1.2-6D28D9?style=flat-square)
+![Memory](https://img.shields.io/badge/Memory-Cognitive-4285F4?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-6D28D9?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
@@ -25,7 +26,7 @@
 
 Claude Code ile aynı işi yaparken token harcamanın onda birine çalışırsın — Claude yalnızca planlar ve inceler, Gemini tüm ağır işi ücretsiz (veya çok düşük maliyetli) olarak yürütür.
 
-Yeni eklenen **Telemetri ve Maliyet Takibi** sistemi sayesinde bu tasarrufu her görev sonunda canlı olarak görebilirsin.
+Yeni eklenen **Project OMEGA** (v1.2) güncellemesi ile sistem artık sadece kod yazmakla kalmaz; yazılan kodu denetler, güvenlik açıklarını tarar ve geçmiş hatalardan ders çıkararak her seferinde daha akıllı kararlar verir.
 
 ---
 
@@ -69,10 +70,19 @@ FILE: … · BASH: …
 Tüm adımlar tek çağrıda"]
     end
 
-    subgraph telemetry ["🟢 Telemetry & Analytics"]
+    subgraph telemetry ["🟢 Telemetry & Mission Control"]
         Costs["**Maliyet Analizi**
-Token sayımı (Input/Output)
-Dolar bazlı hesaplama"]
+Token sayımı (In/Out)
+Dolar bazlı rapor"]
+        Sentinel["**Sentinel Auditor**
+Güvenlik & Karmaşıklık
+Analizi (v1.2)"]
+    end
+
+    subgraph memory ["🟡 Cognitive Memory"]
+        KHub["**Knowledge Hub**
+Geçmiş hata & çözüm
+veritabanı"]
     end
 
     Answer["💬 Markdown cevap"]
@@ -82,17 +92,19 @@ Dolar bazlı hesaplama"]
     Chat -->|soru| Answer
     Answer --> User
     Chat -->|görev| Planner
+    KHub -.->|context| Planner
     Planner -->|plan| Worker
     Worker -->|dosyalar + çıktı| Reviewer
     Reviewer -->|hata varsa| Worker
-    Reviewer -->|temiz| Verifier
-    Verifier -->|INCOMPLETE| Worker
-    Verifier -->|COMPLETE| Workspace
+    Reviewer -->|temiz| Sentinel
+    Sentinel -->|audit score| User
+    Sentinel -->|save success| KHub
+    Sentinel -->|COMPLETE| Workspace
 
     Planner -.->|tokens| Costs
     Worker -.->|tokens| Costs
     Reviewer -.->|tokens| Costs
-    Costs -->|özet| User
+    Costs -->|Dashboard| User
 ```
 
 ---
@@ -118,6 +130,9 @@ Dolar bazlı hesaplama"]
 | | Tasarruf Analizi | Hybrid vs Pure model karşılaştırması |
 | | /stats | Detaylı finansal ve teknik rapor |
 | | /telemetry | Canlı token sayacı kontrolü |
+| | /sidebar | Mission Control yan panel (v1.2) |
+| **Zeka** | Sentinel Audit | Otomatik güvenlik (bandit) ve karmaşıklık analizi |
+| | Knowledge Hub | Geçmiş çözümlerden öğrenen kalıcı bellek |
 
 ---
 
@@ -229,6 +244,7 @@ myagent> test ekle
 | `/compact` | Konuşma geçmişini özetleyip sıkıştır |
 | `/editor` | `$EDITOR` aç — çok satırlı giriş |
 | `/clear` | Ekranı temizle |
+| `/sidebar` | Mission Control panelini göster/gizle |
 | `/exit` | Çıkış |
 
 ---

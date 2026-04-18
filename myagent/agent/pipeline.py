@@ -74,6 +74,8 @@ class RunResult:
     review_approved: bool = False
     completion_verified: bool = False
     run_id: str = ""
+    audit_score: int | None = None
+    audit_summary: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +102,10 @@ def run(
 
     if ui is None:
         ui = make_ui(verbose=verbose)
+
+    # ── OMEGA: Initialization ───────────────────────────────────────────────
+    from myagent.agent.memory import KnowledgeHub
+    memory = KnowledgeHub()
 
     t_start = time.time()
     result = RunResult(task_original=task, task_english=task, dry_run=dry_run, batch=batch)
@@ -182,6 +188,16 @@ def run(
             task, result, lines_en, max_completion_rounds, ui, _update_usage
         )
 
+    # ── OMEGA: Sentinel Audit ────────────────────────────────────────────────
+    if result.created_files and not dry_run:
+        from myagent.agent.auditor import AuditAgent
+        auditor = AuditAgent()
+        with ui.spinner("Sentinel denetimi yapılıyor…", color="green3"):
+            report = auditor.audit_files(result.created_files)
+        result.audit_score = report.score
+        result.audit_summary = report.summary
+        ui.audit_report(report.score, report.summary)
+
     # ── 6. Summary ────────────────────────────────────────────────────────────
     # If review approved the output, promote overall success regardless of any
     # intermediate BASH step failures (e.g. a pytest run that failed before the fix).
@@ -204,6 +220,8 @@ def run(
         review_approved=result.review_approved,
         n_review_rounds=len(result.review_records),
         created_files=result.created_files,
+        usage=result.usage,
+        audit_score=result.audit_score,
     )
 
     # ── 7. Save to history ────────────────────────────────────────────────────
@@ -219,8 +237,16 @@ def run(
             duration_s=time.time() - t_start,
             summary=result.summary_en,
         )
-    except Exception:
-        pass
+    # ── OMEGA: Memory Sync ──────────────────────────────────────────────────
+    if result.success and not dry_run:
+        try:
+            # Memory pattern extraction: find the most complex fix or summary
+            res_summary = "Task completed successfully."
+            if result.review_records:
+                res_summary = f"Fixed issues in {len(result.review_records)} rounds."
+            memory.add_lesson(task, res_summary)
+        except Exception:
+            pass
 
     return result
 

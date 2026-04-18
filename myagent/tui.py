@@ -228,7 +228,7 @@ class MyAgentApp(App):
     def on_mount(self) -> None:
         self.chat_log = self.query_one("#chat-log", VerticalScroll)
         from myagent.config.auth import get_claude_model, get_gemini_model
-        self.log_message(Text(_BANNER, style=f"bold {C_CLAUDE}"))
+        self.log_message(Text(_BANNER, style="bold #c084fc"))
         self.log_message(Text.assemble(
             ("  v1.0.0  ·  ", "dim"),
             ("Claude", f"bold {C_CLAUDE}"),

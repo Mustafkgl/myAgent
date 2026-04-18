@@ -870,4 +870,4 @@ class MyAgentApp(App):
 
 def start_tui(session: "SessionState", verbose: bool = False) -> None:
     app = MyAgentApp(session, verbose=verbose)
-    app.run(mouse=False)
+    app.run(mouse=True)

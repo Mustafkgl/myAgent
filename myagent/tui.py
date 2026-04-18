@@ -231,16 +231,18 @@ class MyAgentApp(App):
         self.log_message(Text(_BANNER, style="bold #c084fc"))
         self.log_message(Text.assemble(
             ("  v1.0.0  ·  ", "dim"),
-            ("Claude", f"bold {C_CLAUDE}"),
+            ("◆ ", "bold #D97706"),
+            ("Claude", "bold #D97706"),
             (" planlar  ·  ", "dim"),
-            ("Gemini", f"bold {C_GEMINI}"),
+            ("✦ ", "bold #4285F4"),
+            ("Gemini", "bold #E8EAED"),
             (" yürütür\n", "dim"),
         ))
         self.log_message(Text.assemble(
-            ("  ", ""),
-            (get_claude_model(), C_CLAUDE),
-            ("  /  ", "dim"),
-            (get_gemini_model(), C_GEMINI),
+            ("  ◆ ", "#D97706"),
+            (get_claude_model(), "#D97706"),
+            ("  ✦ ", "#4285F4"),
+            (get_gemini_model(), "#E8EAED"),
             ("\n", ""),
         ))
         self.log_message(Text(

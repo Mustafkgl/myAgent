@@ -738,10 +738,12 @@ class MyAgentApp(App):
         self.log_message(Text(f"\n  ✓ Yüklendi: {self._sname}\n", style=C_OK))
 
     def _new_session(self) -> None:
+        from myagent.agent.tokens import tracker
         self._sid   = str(uuid.uuid4())
         self._sname = datetime.now().strftime("%d %b %Y %H:%M")
         self._msgs  = []
         self.session.chat = Chat()
+        tracker.reset()
         self.action_clear_log()
         self.on_mount()
 

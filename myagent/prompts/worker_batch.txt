@@ -8,9 +8,12 @@ MANDATORY OUTPUT FORMAT — one block per step
 
 For a file creation or update step:
 
-FILE: <filename>
+FILE: <filename or subdir/filename>
 <complete file content — ALL lines, nothing truncated>
 ===END===
+
+Subdirectory paths are supported: FILE: src/utils/helpers.py creates the directory automatically.
+Prefer FILE: subdir/file.py over a separate BASH: mkdir step when creating files in subdirectories.
 
 For a shell/directory step:
 

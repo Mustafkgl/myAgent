@@ -22,6 +22,14 @@ import subprocess
 
 from myagent.config.settings import GEMINI_API_KEY, PROMPTS_DIR
 
+# Session-level interface contract set by pipeline after planning
+_interface_contract: str = ""
+
+
+def set_interface_contract(contract: str) -> None:
+    global _interface_contract
+    _interface_contract = contract
+
 
 def _system_prompt() -> str:
     return (PROMPTS_DIR / "worker.txt").read_text(encoding="utf-8")
@@ -101,10 +109,59 @@ def _build_batch_prompt(steps: list[str], task: str) -> str:
     lines = []
     if task:
         lines.append(f"Overall task: {task}\n")
+
+    workspace = _workspace_snapshot()
+    if workspace:
+        lines.append(f"Existing workspace files (read these carefully before writing new files):\n{workspace}\n")
+
+    if _interface_contract:
+        lines.append(f"File interface contracts (honour these exactly):\n{_interface_contract}\n")
+
     lines.append("Execute ALL of the following steps in order:\n")
     for i, step in enumerate(steps, 1):
         lines.append(f"STEP {i}: {step}")
     return "\n".join(lines)
+
+
+def _workspace_snapshot(max_total: int = 12_000) -> str:
+    """Return existing workspace file contents for Gemini's context.
+
+    Reads all text files in WORK_DIR (non-hidden, ≤ 4KB each, ≤ 12KB total).
+    This lets Gemini see existing code when generating new files that depend on it.
+    """
+    from myagent.config.settings import WORK_DIR
+
+    SKIP_EXT = {".pyc", ".pyo", ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".bin", ".zip"}
+    parts: list[str] = []
+    total = 0
+
+    try:
+        files = sorted(
+            [p for p in WORK_DIR.rglob("*")
+             if p.is_file()
+             and not any(part.startswith(".") for part in p.parts[-3:])
+             and p.suffix not in SKIP_EXT
+             and "__pycache__" not in str(p)],
+            key=lambda p: p.stat().st_size,
+        )
+    except Exception:
+        return ""
+
+    for path in files:
+        try:
+            rel = str(path.relative_to(WORK_DIR))
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            if len(content) > 4096:
+                content = content[:4096] + "\n... (truncated)"
+            entry = f"--- {rel} ---\n{content}"
+            if total + len(entry) > max_total:
+                break
+            parts.append(entry)
+            total += len(entry)
+        except Exception:
+            continue
+
+    return "\n\n".join(parts) if parts else ""
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ CLAUDE_MODEL: str = "claude-opus-4-6"
 GEMINI_MODEL: str = "gemini-2.0-flash"
 
 # Limits
-MAX_STEPS: int = 10
+MAX_STEPS: int = 10  # fallback default — prefer get_max_steps() for runtime value
 BASH_TIMEOUT: int = 15
 
 # Working directory for file/command execution (resolved at import time)

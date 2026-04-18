@@ -420,9 +420,9 @@ def _show_config() -> None:
 
     from myagent.config.auth import (
         CONFIG_PATH, get_claude_mode, get_claude_model,
-        get_gemini_mode, get_gemini_model, get_overrides,
+        get_gemini_mode, get_gemini_model, get_max_steps, get_overrides,
     )
-    from myagent.config.settings import WORK_DIR, MAX_STEPS
+    from myagent.config.settings import WORK_DIR
     from myagent.i18n.locale import SYSTEM_LANGUAGE
 
     ovr = get_overrides()
@@ -444,7 +444,7 @@ def _show_config() -> None:
     t.add_row("Gemini model",  f"[dodger_blue1]{gemini_model}[/]")
     t.add_row("",              "")
     t.add_row("Work dir",      str(WORK_DIR))
-    t.add_row("Max steps",     str(MAX_STEPS))
+    t.add_row("Max steps",     str(get_max_steps()))
     t.add_row("Language",      SYSTEM_LANGUAGE)
     if ovr:
         t.add_row("Overrides", str(ovr))
@@ -948,12 +948,13 @@ def main() -> None:
     _load_env_file()
 
     # ── 1. Apply runtime overrides from flags ────────────────────────────────
-    from myagent.config.auth import apply_overrides
+    from myagent.config.auth import apply_overrides, save_config
     apply_overrides(
         claude_model=args.claude_model,
         gemini_model=args.gemini_model,
         claude_mode=args.claude_mode,
         gemini_mode=args.gemini_mode,
+        max_steps=str(args.max_steps) if args.max_steps is not None else None,
     )
 
     # ── 2. Apply env/settings overrides ─────────────────────────────────────
@@ -962,8 +963,7 @@ def main() -> None:
         os.environ["MYAGENT_WORK_DIR"] = str(Path(args.work_dir).resolve())
 
     if args.max_steps is not None:
-        import myagent.config.settings as _s
-        _s.MAX_STEPS = args.max_steps
+        save_config({"max_steps": args.max_steps})
 
     # ── 3. Utility-only flags (no wizard needed) ─────────────────────────────
     if args.setup:

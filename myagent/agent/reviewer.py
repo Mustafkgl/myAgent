@@ -165,7 +165,12 @@ def _run_ruff(filenames: list[str]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _build_lint_prompt(task: str, lint_issues: list[dict], file_contents: dict[str, str]) -> str:
-    parts = [f"Task: {task}\n\nLinter found {len(lint_issues)} issue(s):\n"]
+    from myagent.agent.worker import _interface_contract
+    header = f"Task: {task}\n"
+    if _interface_contract:
+        header += f"\n{_interface_contract}\n"
+    header += f"\nLinter found {len(lint_issues)} issue(s):\n"
+    parts = [header]
 
     # Group issues by file
     by_file: dict[str, list[dict]] = {}
@@ -212,7 +217,12 @@ def _run_tests(test_files: list[str], verbose: bool = False, ui=None) -> list[di
 
 def _build_test_prompt(task: str, failures: list[dict]) -> str:
     """Build a surgical prompt from test failure tracebacks."""
-    parts = [f"Task: {task}\n\n{len(failures)} test file(s) failed:\n"]
+    from myagent.agent.worker import _interface_contract
+    header = f"Task: {task}\n"
+    if _interface_contract:
+        header += f"\n{_interface_contract}\n"
+    header += f"\n{len(failures)} test file(s) failed:\n"
+    parts = [header]
     for f in failures:
         parts.append(f"--- {f['file']} ---")
         if f.get("timed_out"):

@@ -16,7 +16,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from myagent.config.settings import ANTHROPIC_API_KEY, MAX_STEPS, PROMPTS_DIR, WORK_DIR
+from myagent.config.settings import ANTHROPIC_API_KEY, PROMPTS_DIR, WORK_DIR
 
 
 def _system_prompt() -> str:
@@ -121,12 +121,14 @@ def plan(
     verbose: bool = False,
     stream_callback=None,
     session_context: str = "",
-) -> list[str]:
-    """Return an ordered list of step strings for *task*.
+) -> tuple[list[str], str]:
+    """Return (steps, interface_contract) for *task*.
 
-    session_context: optional extra context injected by the REPL (e.g. info
-    about the previous task in this session) — not the same as workspace context
-    which is auto-built from disk.
+    steps: ordered list of step strings
+    interface_contract: INTERFACE: block describing file contracts between steps,
+        or "" if the plan involves only a single file.
+
+    session_context: optional extra context injected by the REPL.
     """
     from myagent.config.auth import CLI, get_claude_mode
     mode = get_claude_mode()
@@ -148,7 +150,89 @@ def plan(
         raw = _plan_via_api(full_task, stream_callback=stream_callback)
     if verbose:
         print(f"  [planner raw output]\n{raw}\n", flush=True)
-    return _parse_steps(raw)[:MAX_STEPS]
+
+    from myagent.config.auth import get_max_steps
+    steps = _parse_steps(raw)[:get_max_steps()]
+    interface = _extract_interface(raw)
+
+    # Only generate an interface contract when multiple files are involved
+    if not interface and _needs_interface(steps):
+        interface = _build_interface(task, steps, mode)
+
+    return steps, interface
+
+
+# ---------------------------------------------------------------------------
+# Interface contract helpers
+# ---------------------------------------------------------------------------
+
+_INTERFACE_RE = re.compile(
+    r"INTERFACE:\s*\n((?:\s*-[^\n]+\n?)+)", re.IGNORECASE
+)
+_FILE_EXT_RE = re.compile(
+    r"\b[\w./\\-]+\.(?:py|js|ts|tsx|jsx|json|yaml|yml|toml|md|html|css|sh)\b"
+)
+
+
+def _extract_interface(raw: str) -> str:
+    """Pull an INTERFACE: block from the raw planner output if present."""
+    m = _INTERFACE_RE.search(raw)
+    return m.group(0).strip() if m else ""
+
+
+def _needs_interface(steps: list[str]) -> bool:
+    """Return True if the plan creates multiple distinct files."""
+    files: set[str] = set()
+    for step in steps:
+        for fname in _FILE_EXT_RE.findall(step):
+            files.add(fname.lower())
+    return len(files) >= 2
+
+
+def _build_interface(task: str, steps: list[str], mode: str) -> str:
+    """Ask Claude to produce a compact INTERFACE: block for the plan."""
+    prompt = (
+        f"Task: {task}\n\n"
+        f"Plan:\n" + "\n".join(f"STEP {i}: {s}" for i, s in enumerate(steps, 1)) +
+        "\n\nList the data contracts between these files in this EXACT format "
+        "(nothing else, max 6 lines):\n"
+        "INTERFACE:\n- file_a.py → function/class exported and what it returns\n"
+        "- file_b.py → what it imports from file_a.py\n\n"
+        "Only include files that depend on each other. "
+        "If all steps touch the same file, respond with: INTERFACE: (single file)"
+    )
+    try:
+        from myagent.config.auth import CLI as _CLI, get_claude_model
+        from myagent.config.settings import ANTHROPIC_API_KEY
+
+        model = get_claude_model()
+        if mode == _CLI:
+            import subprocess
+            cmd = ["claude", "-p", prompt, "--model", model]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            raw = result.stdout.strip() if result.returncode == 0 else ""
+        else:
+            if not ANTHROPIC_API_KEY:
+                return ""
+            import anthropic
+            from myagent.agent.tokens import tracker
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            resp = client.messages.create(
+                model=model, max_tokens=256,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            tracker.add_claude(resp.usage.input_tokens, resp.usage.output_tokens, model)
+            raw = resp.content[0].text.strip()
+
+        # Extract just the INTERFACE: block
+        m = _INTERFACE_RE.search(raw)
+        if m:
+            return m.group(0).strip()
+        if "single file" in raw.lower():
+            return ""
+    except Exception:
+        pass
+    return ""
 
 
 # ---------------------------------------------------------------------------

@@ -97,11 +97,11 @@ def _build_prompt(task: str, files: list[str]) -> str:
             content = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
-        if len(content) > 2500:
-            content = content[:2500] + "\n... (truncated)"
+        if len(content) > 8192:
+            content = content[:8192] + "\n... (truncated)"
         total += len(content)
         snippets.append(f"--- {fname} ---\n{content}")
-        if total > 8000:
+        if total > 32_000:
             snippets.append("... (further files omitted)")
             break
 

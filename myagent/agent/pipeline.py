@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from myagent.agent.executor import ExecutionResult, parse_and_execute, parse_batch_and_execute
 from myagent.agent.planner import plan
-from myagent.agent.worker import execute_all_steps, execute_step
+from myagent.agent.worker import execute_all_steps, execute_step, set_interface_contract
 from myagent.i18n.translator import en_to_tr
 
 if TYPE_CHECKING:
@@ -86,7 +86,7 @@ def run(
     batch: bool = True,
     clarify: bool = False,
     review: bool = True,
-    max_review_rounds: int = 2,
+    max_review_rounds: int = 4,
     auto_deps: bool = False,
     verify_completion: bool = True,
     max_completion_rounds: int = 2,
@@ -121,13 +121,14 @@ def run(
         write(chunk)  # forward to streaming UI
 
     with ui.streaming("Claude planlıyor…", color="medium_purple1") as write:
-        steps = plan(
+        steps, interface_contract = plan(
             task, verbose=False,
             stream_callback=_planner_write,
             session_context=session_context,
         )
     result.plan_steps = steps
     _last_raw["planner"] = "".join(_planner_buf)
+    set_interface_contract(interface_contract)
 
     if verbose:
         from myagent.config.auth import get_claude_model as gcm

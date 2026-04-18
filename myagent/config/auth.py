@@ -163,3 +163,12 @@ def get_gemini_model() -> str:
         or load_config().get("gemini_model", GEMINI_DEFAULT)
     )
     return resolve_model(raw, "gemini")
+
+
+def get_max_steps() -> int:
+    from myagent.config.settings import MAX_STEPS
+    raw = _overrides.get("max_steps") or load_config().get("max_steps")
+    try:
+        return int(raw) if raw is not None else MAX_STEPS
+    except (ValueError, TypeError):
+        return MAX_STEPS

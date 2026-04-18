@@ -23,7 +23,7 @@ from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
-from textual.events import Key, MouseScrollDown, MouseScrollUp
+from textual.events import Key
 from textual.widgets import Footer, Header, Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -326,6 +326,22 @@ class MyAgentApp(App):
                 ac.display = False
                 return
 
+        # Page Up / Page Down → chat log scroll (works regardless of focus)
+        if event.key == "pageup":
+            event.prevent_default(); event.stop()
+            try:
+                self.query_one("#chat-log", VerticalScroll).scroll_page_up(animate=False)
+            except Exception:
+                pass
+            return
+        elif event.key == "pagedown":
+            event.prevent_default(); event.stop()
+            try:
+                self.query_one("#chat-log", VerticalScroll).scroll_page_down(animate=False)
+            except Exception:
+                pass
+            return
+
         # Input history (only when autocomplete hidden and input focused)
         if self.focused is not inp:
             return
@@ -353,20 +369,6 @@ class MyAgentApp(App):
                 self._hist_pos = -1
                 inp.value = self._hist_draft
             inp.cursor_position = len(inp.value)
-
-    # ── Mouse scroll → chat log scroll ───────────────────────────────────────
-
-    def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
-        try:
-            self.query_one("#chat-log", VerticalScroll).scroll_up(animate=False)
-        except Exception:
-            pass
-
-    def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
-        try:
-            self.query_one("#chat-log", VerticalScroll).scroll_down(animate=False)
-        except Exception:
-            pass
 
     # ── Input submit ──────────────────────────────────────────────────────────
 
@@ -858,6 +860,7 @@ class MyAgentApp(App):
             + rows + "\n\n"
             "**Kısayollar:**  "
             "`↑` `↓` geçmiş  ·  "
+            "`PgUp` `PgDn` scroll  ·  "
             "`Tab` otomatik tamamla  ·  "
             "`Ctrl+Y` kopyala  ·  "
             "`Ctrl+L` temizle  ·  "
@@ -867,4 +870,4 @@ class MyAgentApp(App):
 
 def start_tui(session: "SessionState", verbose: bool = False) -> None:
     app = MyAgentApp(session, verbose=verbose)
-    app.run(mouse=True)
+    app.run(mouse=False)

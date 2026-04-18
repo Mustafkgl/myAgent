@@ -42,50 +42,42 @@ Claude Code ile aynı işi yaparken token harcamanın onda birine çalışırsı
 
 ## Mimari
 
-```
-╔══════════════════════════════════════════════════════════════════╗
-║                        myAgent Pipeline                          ║
-╚══════════════════════════════════════════════════════════════════╝
+```mermaid
+flowchart TD
+    User(["👤 Sen"])
 
-  Sen                                                          Sen
-  │                                                             ▲
-  │  "basit bir şifre üreteci yaz"                              │
-  ▼                                                             │
-┌─────────────────────────────────┐                   ┌─────────────────┐
-│   Chat Router  (Claude)         │──── Soru ─────────▶  Markdown cevap │
-│   Görev mi? → Pipeline başlat   │                   └─────────────────┘
-└──────────────┬──────────────────┘
-               │  Görev
-               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Planner  (Claude)                                               │
-│  STEP 1: Create password_gen.py with generate(length, symbols)   │
-│  STEP 2: Add CLI argparse interface                              │
-│  STEP 3: Run python password_gen.py --test                       │
-└──────────────┬───────────────────────────────────────────────────┘
-               │  Plan
-               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Worker  (Gemini)                                                │
-│  FILE: password_gen.py  ···  BASH: python password_gen.py        │
-│  Tüm adımlar tek çağrıda — ücretsiz, hızlı                      │
-└──────────────┬───────────────────────────────────────────────────┘
-               │  Dosyalar + çıktı
-               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Reviewer  (Claude)                                              │
-│  ruff lint → pytest → "LGTM" veya "Şunu düzelt: …"              │
-│  Hata varsa Gemini'ye düzeltme gönderilir  (maks 2 tur)         │
-└──────────────┬───────────────────────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Verifier  (Claude)                                              │
-│  "COMPLETE" → bitti    "INCOMPLETE: STEP 2" → tekrar döngü      │
-└──────────────┬───────────────────────────────────────────────────┘
-               │
-               ▼
-         /workspace  ✓
+    subgraph claude ["🟣 Claude  —  Planner & Reviewer"]
+        Chat["**Chat Router**
+Soru mu? Görev mi?"]
+        Planner["**Planner**
+Görevi atomik adımlara böler
+STEP 1 · STEP 2 · STEP 3"]
+        Reviewer["**Reviewer**
+ruff lint · pytest
+Hata → düzeltme döngüsü"]
+        Verifier["**Verifier**
+COMPLETE / INCOMPLETE"]
+    end
+
+    subgraph gemini ["🔵 Gemini  —  Worker"]
+        Worker["**Worker**
+FILE: … · BASH: …
+Tüm adımlar tek çağrıda"]
+    end
+
+    Answer["💬 Markdown cevap"]
+    Workspace["📁 /workspace  ✓"]
+
+    User -->|girdi| Chat
+    Chat -->|soru| Answer
+    Answer --> User
+    Chat -->|görev| Planner
+    Planner -->|plan| Worker
+    Worker -->|dosyalar + çıktı| Reviewer
+    Reviewer -->|hata varsa| Worker
+    Reviewer -->|temiz| Verifier
+    Verifier -->|INCOMPLETE| Worker
+    Verifier -->|COMPLETE| Workspace
 ```
 
 ---

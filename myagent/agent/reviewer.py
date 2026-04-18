@@ -251,10 +251,13 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
     mode = get_claude_mode()
     system = (PROMPTS_DIR / "reviewer.txt").read_text(encoding="utf-8")
 
+    from myagent.agent.tokens import tracker
+
+    model = get_claude_model()
     if mode == CLI:
         import time
         full_prompt = f"{system}\n\n{prompt}"
-        cmd = ["claude", "-p", full_prompt, "--model", get_claude_model()]
+        cmd = ["claude", "-p", full_prompt, "--model", model]
         try:
             if stream_callback:
                 proc = subprocess.Popen(
@@ -265,11 +268,13 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
                 output = interrupt.readline_interruptible(proc, stream_callback, deadline)
                 if proc.returncode not in (0, None):
                     return "APPROVED"
+                tracker.add_claude(len(full_prompt) // 4, len(output) // 4, model, estimated=True)
                 return output.strip()
             else:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 if result.returncode != 0:
                     return "APPROVED"
+                tracker.add_claude(len(full_prompt) // 4, len(result.stdout) // 4, model, estimated=True)
                 return result.stdout.strip()
         except Exception:
             return "APPROVED"
@@ -281,20 +286,23 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
             if stream_callback:
                 with client.messages.stream(
-                    model=get_claude_model(),
+                    model=model,
                     max_tokens=1024,
                     system=system,
                     messages=[{"role": "user", "content": prompt}],
                 ) as stream:
                     for text in stream.text_stream:
                         stream_callback(text)
-                    return stream.get_final_message().content[0].text.strip()
+                    msg = stream.get_final_message()
+                    tracker.add_claude(msg.usage.input_tokens, msg.usage.output_tokens, model)
+                    return msg.content[0].text.strip()
             response = client.messages.create(
-                model=get_claude_model(),
+                model=model,
                 max_tokens=1024,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
+            tracker.add_claude(response.usage.input_tokens, response.usage.output_tokens, model)
             return response.content[0].text.strip()
         except Exception:
             return "APPROVED"

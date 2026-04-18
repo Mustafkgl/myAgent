@@ -119,11 +119,13 @@ def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> st
             "  export GEMINI_API_KEY=AIza...  ya da  myagent> setup"
         )
     import google.generativeai as genai
+    from myagent.agent.tokens import tracker
     from myagent.config.auth import get_gemini_model
 
+    model = get_gemini_model()
     genai.configure(api_key=api_key)
     m = genai.GenerativeModel(
-        model_name=get_gemini_model(),
+        model_name=model,
         system_instruction=_system_prompt(),
     )
     prompt = (
@@ -134,13 +136,18 @@ def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> st
     cfg = genai.GenerationConfig(temperature=0.1)
     if stream_callback:
         parts = []
+        last_chunk = None
         for chunk in m.generate_content(prompt, generation_config=cfg, stream=True):
             t = chunk.text
             if t:
                 parts.append(t)
                 stream_callback(t)
-        return "".join(parts)
+            last_chunk = chunk
+        result = "".join(parts)
+        _track_gemini_chunk(last_chunk, prompt, result, model, tracker)
+        return result
     response = m.generate_content(prompt, generation_config=cfg)
+    _track_gemini_response(response, model, tracker)
     return response.text
 
 
@@ -149,24 +156,62 @@ def _gemini_api_batch(prompt: str, stream_callback=None) -> str:
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY tanımlı değil.")
     import google.generativeai as genai
+    from myagent.agent.tokens import tracker
     from myagent.config.auth import get_gemini_model
 
+    model = get_gemini_model()
     genai.configure(api_key=api_key)
     m = genai.GenerativeModel(
-        model_name=get_gemini_model(),
+        model_name=model,
         system_instruction=_batch_system_prompt(),
     )
     cfg = genai.GenerationConfig(temperature=0.1)
     if stream_callback:
         parts = []
+        last_chunk = None
         for chunk in m.generate_content(prompt, generation_config=cfg, stream=True):
             t = chunk.text
             if t:
                 parts.append(t)
                 stream_callback(t)
-        return "".join(parts)
+            last_chunk = chunk
+        result = "".join(parts)
+        _track_gemini_chunk(last_chunk, prompt, result, model, tracker)
+        return result
     response = m.generate_content(prompt, generation_config=cfg)
+    _track_gemini_response(response, model, tracker)
     return response.text
+
+
+def _track_gemini_response(response, model: str, tracker) -> None:
+    try:
+        um = response.usage_metadata
+        if um and (um.prompt_token_count or um.candidates_token_count):
+            tracker.add_gemini(
+                um.prompt_token_count or 0,
+                um.candidates_token_count or 0,
+                model,
+            )
+            return
+    except Exception:
+        pass
+    tracker.add_gemini(len(str(response.text)) // 4, len(str(response.text)) // 4, model, estimated=True)
+
+
+def _track_gemini_chunk(last_chunk, prompt: str, result: str, model: str, tracker) -> None:
+    try:
+        if last_chunk is not None:
+            um = last_chunk.usage_metadata
+            if um and (um.prompt_token_count or um.candidates_token_count):
+                tracker.add_gemini(
+                    um.prompt_token_count or 0,
+                    um.candidates_token_count or 0,
+                    model,
+                )
+                return
+    except Exception:
+        pass
+    tracker.add_gemini(len(prompt) // 4, len(result) // 4, model, estimated=True)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +242,9 @@ def _gemini_cli_run(full_prompt: str, stream_callback=None) -> str:
             f"Gemini CLI hata (kod {result.returncode}):\n"
             f"{(result.stderr or result.stdout).strip()}"
         )
+    from myagent.agent.tokens import tracker
+    from myagent.config.auth import get_gemini_model
+    tracker.add_gemini(len(full_prompt) // 4, len(result.stdout) // 4, get_gemini_model(), estimated=True)
     return result.stdout
 
 
@@ -227,6 +275,8 @@ def _gemini_cli_stream(full_prompt: str, callback) -> str:
         raise RuntimeError(
             f"Gemini CLI hata (kod {proc.returncode}):\n{stderr.strip()[:300]}"
         )
+    from myagent.agent.tokens import tracker
+    tracker.add_gemini(len(full_prompt) // 4, len(output) // 4, m or get_gemini_model(), estimated=True)
     return output
 
 

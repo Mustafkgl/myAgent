@@ -460,16 +460,79 @@ class MyAgentApp(App):
         ))
 
     def _cmd_status(self) -> None:
+        from myagent.agent.tokens import tracker
+
         n_user = sum(1 for m in self._msgs if m["role"] == "user")
         n_asst = sum(1 for m in self._msgs if m["role"] == "assistant")
-        self.log_message(Text.assemble(
+
+        base = Text.assemble(
             ("\n  Oturum Durumu\n", f"bold {C_CLAUDE}"),
             ("  Ad:         ", "dim"), (self._sname, "white"), ("\n", ""),
             ("  ID:         ", "dim"), (self._sid[:8], "dim"), ("\n", ""),
             ("  Mesajlar:   ", "dim"), (f"{n_user} soru / {n_asst} cevap\n", "white"),
             ("  Verbose:    ", "dim"), ("açık\n" if self.verbose else "kapalı\n", "white"),
-            ("  Tema:       ", "dim"), ("dark\n\n" if self.dark else "light\n\n", "white"),
-        ))
+            ("  Tema:       ", "dim"), ("dark\n" if self.dark else "light\n", "white"),
+        )
+        self.log_message(base)
+
+        if not tracker.has_data():
+            self.log_message(Text("  (henüz token verisi yok)\n\n", style="dim"))
+            return
+
+        est_c = "~" if tracker.claude.has_estimates else ""
+        est_g = "~" if tracker.gemini.has_estimates else ""
+        c_cost = tracker.claude_cost()
+        g_cost = tracker.gemini_cost()
+        sav    = tracker.savings()
+        sav_pct = tracker.savings_pct()
+        hyp    = tracker.hypothetical_cost()
+        fp_rate = tracker.first_pass_rate()
+        n_tasks = tracker.tasks_total
+
+        def fmt_tok(n: int) -> str:
+            return f"{n:,}" if n < 1_000_000 else f"{n/1_000_000:.2f}M"
+
+        def fmt_cost(v: float) -> str:
+            if v < 0.0001:
+                return f"${v * 100_000:.2f} (0.00001¢)"
+            if v < 0.01:
+                return f"${v:.5f}"
+            return f"${v:.4f}"
+
+        tok_section = Text.assemble(
+            ("\n  Token Kullanımı\n", f"bold {C_CLAUDE}"),
+            ("  ◆ Claude:  ", f"bold {C_CLAUDE}"),
+            (f"{est_c}{fmt_tok(tracker.claude.input_tokens)} giriş  +  "
+             f"{est_c}{fmt_tok(tracker.claude.output_tokens)} çıkış", "white"),
+            (f"  =  {est_c}{fmt_cost(c_cost)}\n", "dim"),
+            ("  ✦ Gemini:  ", f"bold {C_GEMINI}"),
+            (f"{est_g}{fmt_tok(tracker.gemini.input_tokens)} giriş  +  "
+             f"{est_g}{fmt_tok(tracker.gemini.output_tokens)} çıkış", "white"),
+            (f"  =  {est_g}{fmt_cost(g_cost)}\n", "dim"),
+        )
+        self.log_message(tok_section)
+
+        sav_section = Text.assemble(
+            ("\n  Maliyet Tasarrufu\n", f"bold {C_CLAUDE}"),
+            ("  Tümü Claude olsaydı:   ", "dim"),
+            (f"{est_c}{fmt_cost(hyp)}\n", "white"),
+            ("  Gerçek maliyet:        ", "dim"),
+            (f"{fmt_cost(c_cost + g_cost)}\n", "white"),
+            ("  Tasarruf:              ", "dim"),
+            (f"{fmt_cost(sav)}  (%{sav_pct:.1f})\n", "bold green" if sav > 0 else "white"),
+        )
+        self.log_message(sav_section)
+
+        if n_tasks > 0:
+            eff_section = Text.assemble(
+                ("\n  Verimlilik\n", f"bold {C_CLAUDE}"),
+                ("  Toplam görev:   ", "dim"), (f"{n_tasks}\n", "white"),
+                ("  İlk seferde:    ", "dim"),
+                (f"{tracker.tasks_first_pass}  (%{fp_rate:.0f})\n\n", "white"),
+            )
+            self.log_message(eff_section)
+        else:
+            self.log_message(Text("\n", ""))
 
     def _cmd_config(self) -> None:
         from myagent.config.auth import get_claude_model, get_gemini_model

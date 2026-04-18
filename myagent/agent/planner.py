@@ -162,27 +162,32 @@ def _plan_via_api(task: str, stream_callback=None) -> str:
             "  export ANTHROPIC_API_KEY=sk-ant-...  ya da  myagent> setup"
         )
     import anthropic
+    from myagent.agent.tokens import tracker
     from myagent.config.auth import get_claude_model
 
+    model = get_claude_model()
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
     if stream_callback:
         with client.messages.stream(
-            model=get_claude_model(),
+            model=model,
             max_tokens=1024,
             system=_system_prompt(),
             messages=[{"role": "user", "content": task}],
         ) as stream:
             for text in stream.text_stream:
                 stream_callback(text)
-            return stream.get_final_message().content[0].text
+            msg = stream.get_final_message()
+            tracker.add_claude(msg.usage.input_tokens, msg.usage.output_tokens, model)
+            return msg.content[0].text
 
     response = client.messages.create(
-        model=get_claude_model(),
+        model=model,
         max_tokens=1024,
         system=_system_prompt(),
         messages=[{"role": "user", "content": task}],
     )
+    tracker.add_claude(response.usage.input_tokens, response.usage.output_tokens, model)
     return response.content[0].text
 
 
@@ -195,6 +200,8 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
     model = get_claude_model()
     full_prompt = f"{_system_prompt()}\n\nTask: {task}"
     cmd = ["claude", "-p", full_prompt, "--model", model]
+
+    from myagent.agent.tokens import tracker
 
     if stream_callback:
         import time
@@ -210,6 +217,7 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
         stderr = proc.stderr.read() if proc.stderr else ""
         if proc.returncode not in (0, None):
             raise RuntimeError(f"Claude CLI hata (kod {proc.returncode}):\n{stderr.strip()}")
+        tracker.add_claude(len(full_task) // 4, len(output) // 4, model, estimated=True)
         return output
 
     try:
@@ -222,6 +230,7 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise RuntimeError(f"Claude CLI hata (kod {result.returncode}):\n{detail}")
+    tracker.add_claude(len(full_task) // 4, len(result.stdout) // 4, model, estimated=True)
     return result.stdout
 
 

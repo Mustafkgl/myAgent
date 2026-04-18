@@ -199,7 +199,15 @@ def run(
         created_files=result.created_files,
     )
 
-    # ── 7. Save to history ────────────────────────────────────────────────────
+    # ── 7. Record token efficiency ────────────────────────────────────────────
+    try:
+        from myagent.agent.tokens import tracker
+        first_pass = not any(rr.fix_steps for rr in result.review_records)
+        tracker.record_task(first_pass=first_pass)
+    except Exception:
+        pass
+
+    # ── 8. Save to history ────────────────────────────────────────────────────
     try:
         from myagent.memory.history import save_run
         result.run_id = save_run(

@@ -149,12 +149,14 @@ def _ask_via_api(system: str, history: list[dict], stream_callback=None) -> str:
         return "ACTION: ANSWER\nHata: ANTHROPIC_API_KEY tanımlı değil."
     try:
         import anthropic
+        from myagent.agent.tokens import tracker
         from myagent.config.auth import get_claude_model
+        model = get_claude_model()
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
         if stream_callback:
             with client.messages.stream(
-                model=get_claude_model(),
+                model=model,
                 max_tokens=1024,
                 system=system,
                 messages=history,
@@ -163,31 +165,35 @@ def _ask_via_api(system: str, history: list[dict], stream_callback=None) -> str:
                 for text in stream.text_stream:
                     parts.append(text)
                     stream_callback(text)
+                msg = stream.get_final_message()
+                tracker.add_claude(msg.usage.input_tokens, msg.usage.output_tokens, model)
                 return "".join(parts).strip()
 
         response = client.messages.create(
-            model=get_claude_model(),
+            model=model,
             max_tokens=1024,
             system=system,
             messages=history,
         )
+        tracker.add_claude(response.usage.input_tokens, response.usage.output_tokens, model)
         return response.content[0].text.strip()
     except Exception as exc:
         return f"ACTION: ANSWER\nHata: {exc}"
 
 
 def _ask_via_cli(system: str, history: list[dict], stream_callback=None) -> str:
+    from myagent.agent.tokens import tracker
     from myagent.config.auth import get_claude_model
 
+    model = get_claude_model()
     # Build a single prompt: system + conversation history
     turns: list[str] = [system, ""]
     for msg in history:
         role = "User" if msg["role"] == "user" else "Assistant"
         turns.append(f"{role}: {msg['content']}")
-    # The last turn is the user's latest message (already in history)
     full_prompt = "\n".join(turns)
 
-    cmd = ["claude", "-p", full_prompt, "--model", get_claude_model()]
+    cmd = ["claude", "-p", full_prompt, "--model", model]
 
     if stream_callback:
         try:
@@ -198,6 +204,8 @@ def _ask_via_cli(system: str, history: list[dict], stream_callback=None) -> str:
             from myagent import interrupt
             deadline = time.time() + 60
             output = interrupt.readline_interruptible(proc, stream_callback, deadline)
+            if output.strip():
+                tracker.add_claude(len(full_prompt) // 4, len(output) // 4, model, estimated=True)
             return output.strip() or "ACTION: ANSWER\nZaman aşımı."
         except Exception as exc:
             return f"ACTION: ANSWER\nHata: {exc}"
@@ -206,6 +214,7 @@ def _ask_via_cli(system: str, history: list[dict], stream_callback=None) -> str:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if result.returncode != 0:
                 return f"ACTION: ANSWER\nClaude CLI hata: {result.stderr.strip()[:200]}"
+            tracker.add_claude(len(full_prompt) // 4, len(result.stdout) // 4, model, estimated=True)
             return result.stdout.strip()
         except Exception as exc:
             return f"ACTION: ANSWER\nHata: {exc}"

@@ -8,6 +8,8 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Claude](https://img.shields.io/badge/Planner-Claude-c084fc?style=flat-square)
 ![Gemini](https://img.shields.io/badge/Worker-Gemini-4285F4?style=flat-square)
+![Telemetry](https://img.shields.io/badge/Telemetry-Integrated-059669?style=flat-square)
+![Cost](https://img.shields.io/badge/Cost-Tracked-059669?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-6D28D9?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
@@ -21,7 +23,9 @@
 
 > Pahalı modeli sadece beyne ver. Bedava modeli kola.
 
-Claude Code ile aynı işi yaparken token harcamanın onda birine çalışırsın — Claude yalnızca planlar ve inceler, Gemini tüm ağır işi ücretsiz olarak yürütür.
+Claude Code ile aynı işi yaparken token harcamanın onda birine çalışırsın — Claude yalnızca planlar ve inceler, Gemini tüm ağır işi ücretsiz (veya çok düşük maliyetli) olarak yürütür.
+
+Yeni eklenen **Telemetri ve Maliyet Takibi** sistemi sayesinde bu tasarrufu her görev sonunda canlı olarak görebilirsin.
 
 ---
 
@@ -65,6 +69,12 @@ FILE: … · BASH: …
 Tüm adımlar tek çağrıda"]
     end
 
+    subgraph telemetry ["🟢 Telemetry & Analytics"]
+        Costs["**Maliyet Analizi**
+Token sayımı (Input/Output)
+Dolar bazlı hesaplama"]
+    end
+
     Answer["💬 Markdown cevap"]
     Workspace["📁 /workspace  ✓"]
 
@@ -78,6 +88,11 @@ Tüm adımlar tek çağrıda"]
     Reviewer -->|temiz| Verifier
     Verifier -->|INCOMPLETE| Worker
     Verifier -->|COMPLETE| Workspace
+
+    Planner -.->|tokens| Costs
+    Worker -.->|tokens| Costs
+    Reviewer -.->|tokens| Costs
+    Costs -->|özet| User
 ```
 
 ---
@@ -99,6 +114,10 @@ Tüm adımlar tek çağrıda"]
 | | Cross-platform | Windows · macOS · Linux |
 | | Auth esnekliği | API key veya OAuth (Claude Code / Gemini CLI) |
 | | Docker sandbox | Tam izole çalışma ortamı |
+| **Analitik** | Maliyet Takibi | Token bazlı dolar hesabı |
+| | Tasarruf Analizi | Hybrid vs Pure model karşılaştırması |
+| | /stats | Detaylı finansal ve teknik rapor |
+| | /telemetry | Canlı token sayacı kontrolü |
 
 ---
 
@@ -197,6 +216,8 @@ myagent> test ekle
 | `/config` | Mevcut yapılandırmayı göster |
 | `/doctor` | Sistem sağlık kontrolü ve diyagnostik |
 | `/status` | Oturum istatistikleri |
+| `/stats` | Detaylı token kullanımı ve maliyet analitiği |
+| `/telemetry` | Canlı token sayacını aç / kapat |
 | `/about` | Versiyon ve model bilgileri |
 | `/think` | Verbose modunu aç / kapat |
 | `/theme dark\|light` | Temayı değiştir |
@@ -209,6 +230,20 @@ myagent> test ekle
 | `/editor` | `$EDITOR` aç — çok satırlı giriş |
 | `/clear` | Ekranı temizle |
 | `/exit` | Çıkış |
+
+---
+
+### Maliyet ve Telemetri
+
+myAgent, "Bilinçli Asimetri" felsefesinin ne kadar tasarruf sağladığını size şeffaf bir şekilde sunar. Her görev sonunda harcanan toplam token miktarını ve gerçek maliyetini dolar bazında görebilirsiniz.
+
+- **Estimated Savings (Tahmini Tasarruf):** Tüm sistemin Claude Opus (veya seçilen planlayıcı) ile çalışması durumunda oluşacak maliyet ile mevcut hibrit model arasındaki farkı gösterir.
+- **Canlı Takip:** Görev sırasında hangi modelden ne kadar veri akışı olduğunu gerçek zamanlı izleme imkanı sunar.
+
+<div align="center">
+<img src="docs/screenshot_stats.png" alt="/stats ekranı örneği" width="700"/>
+<br/><em>/stats komutu ile detaylı maliyet dökümü</em>
+</div>
 
 ---
 

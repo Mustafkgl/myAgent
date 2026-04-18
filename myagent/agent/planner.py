@@ -141,21 +141,22 @@ def plan(
     if session_context:
         parts.append(f"Session context:\n{session_context}")
     full_task = "\n\n".join(parts)
+    usage = None
 
     if mode == CLI:
-        raw = _plan_via_cli(full_task, stream_callback=stream_callback)
+        raw, usage = _plan_via_cli(full_task, stream_callback=stream_callback)
     else:
-        raw = _plan_via_api(full_task, stream_callback=stream_callback)
+        raw, usage = _plan_via_api(full_task, stream_callback=stream_callback)
     if verbose:
         print(f"  [planner raw output]\n{raw}\n", flush=True)
-    return _parse_steps(raw)[:MAX_STEPS]
+    return _parse_steps(raw)[:MAX_STEPS], usage
 
 
 # ---------------------------------------------------------------------------
 # API mode
 # ---------------------------------------------------------------------------
 
-def _plan_via_api(task: str, stream_callback=None) -> str:
+def _plan_via_api(task: str, stream_callback=None) -> tuple[str, dict | None]:
     if not ANTHROPIC_API_KEY:
         raise RuntimeError(
             "Claude API modu seçili fakat ANTHROPIC_API_KEY tanımlı değil.\n"
@@ -175,7 +176,12 @@ def _plan_via_api(task: str, stream_callback=None) -> str:
         ) as stream:
             for text in stream.text_stream:
                 stream_callback(text)
-            return stream.get_final_message().content[0].text
+            msg = stream.get_final_message()
+            usage = {
+                "input": msg.usage.input_tokens,
+                "output": msg.usage.output_tokens,
+            }
+            return msg.content[0].text, usage
 
     response = client.messages.create(
         model=get_claude_model(),
@@ -183,14 +189,18 @@ def _plan_via_api(task: str, stream_callback=None) -> str:
         system=_system_prompt(),
         messages=[{"role": "user", "content": task}],
     )
-    return response.content[0].text
+    usage = {
+        "input": response.usage.input_tokens,
+        "output": response.usage.output_tokens,
+    }
+    return response.content[0].text, usage
 
 
 # ---------------------------------------------------------------------------
 # CLI mode
 # ---------------------------------------------------------------------------
 
-def _plan_via_cli(task: str, stream_callback=None) -> str:
+def _plan_via_cli(task: str, stream_callback=None) -> tuple[str, dict | None]:
     from myagent.config.auth import get_claude_model
     model = get_claude_model()
     full_prompt = f"{_system_prompt()}\n\nTask: {task}"
@@ -210,7 +220,7 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
         stderr = proc.stderr.read() if proc.stderr else ""
         if proc.returncode not in (0, None):
             raise RuntimeError(f"Claude CLI hata (kod {proc.returncode}):\n{stderr.strip()}")
-        return output
+        return output, None
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -222,7 +232,7 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise RuntimeError(f"Claude CLI hata (kod {result.returncode}):\n{detail}")
-    return result.stdout
+    return result.stdout, None
 
 
 # ---------------------------------------------------------------------------

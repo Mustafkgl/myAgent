@@ -37,6 +37,7 @@ class StepRecord:
     description: str
     worker_output: str
     result: ExecutionResult
+    usage: dict | None = None
 
 
 @dataclass
@@ -57,8 +58,8 @@ class CompletionRecord:
 
 @dataclass
 class RunResult:
-    task_original: str
     task_english: str
+    usage: dict[str, dict[str, int]] = field(default_factory=lambda: {"claude": {"input": 0, "output": 0}, "gemini": {"input": 0, "output": 0}})
     steps: list[StepRecord] = field(default_factory=list)
     plan_steps: list[str] = field(default_factory=list)
     created_files: list[str] = field(default_factory=list)
@@ -113,20 +114,26 @@ def run(
         task = ask_clarify(task, verbose=verbose)
     result.clarified_task = task
 
+    def _update_usage(prov: str, u: dict | None):
+        if not u: return
+        result.usage[prov]["input"] += u.get("input", 0)
+        result.usage[prov]["output"] += u.get("output", 0)
+
     # ── 2. Plan ─────────────────────────────────────────────────────────────
     _planner_buf: list[str] = []
 
     def _planner_write(chunk: str) -> None:
         _planner_buf.append(chunk)
-        write(chunk)  # forward to streaming UI
+        write(chunk)
 
     with ui.streaming("Claude planlıyor…", color="medium_purple1") as write:
-        steps = plan(
+        steps, p_usage = plan(
             task, verbose=False,
             stream_callback=_planner_write,
             session_context=session_context,
         )
     result.plan_steps = steps
+    _update_usage("claude", p_usage)
     _last_raw["planner"] = "".join(_planner_buf)
 
     if verbose:
@@ -147,13 +154,13 @@ def run(
         return result
 
     # ── 3. Execute ───────────────────────────────────────────────────────────
-    lines_en = _execute(steps, task, batch, verbose, result, ui)
+    lines_en = _execute(steps, task, batch, verbose, result, ui, _update_usage)
 
     # ── 3a. Missing-file recovery ────────────────────────────────────────────
     retry_steps = _find_missing_steps(steps, result.created_files)
     if retry_steps:
         ui.missing_files_retry(retry_steps)
-        extra_lines = _execute(retry_steps, task, batch, verbose, result, ui)
+        extra_lines = _execute(retry_steps, task, batch, verbose, result, ui, _update_usage)
         lines_en.extend(extra_lines)
 
     # ── 3b. Dependency management ─────────────────────────────────────────────
@@ -167,12 +174,12 @@ def run(
     # Run review whenever files were created — BASH step failures (e.g. a pytest
     # run that fails) are exactly what the reviewer is meant to catch and fix.
     if review and result.created_files:
-        lines_en = _review_loop(task, result, lines_en, max_review_rounds, verbose, ui)
+        lines_en = _review_loop(task, result, lines_en, max_review_rounds, verbose, ui, _update_usage)
 
     # ── 5. Completion verification loop ──────────────────────────────────────
     if verify_completion and result.created_files:
         lines_en = _completion_loop(
-            task, result, lines_en, max_completion_rounds, ui,
+            task, result, lines_en, max_completion_rounds, ui, _update_usage
         )
 
     # ── 6. Summary ────────────────────────────────────────────────────────────
@@ -266,13 +273,15 @@ def _execute(
     verbose: bool,
     result: RunResult,
     ui,
+    update_usage_cb,
 ) -> list[str]:
     lines_en: list[str] = []
     seen_files: dict[str, bool] = {}
 
     if batch:
         with ui.streaming(f"Gemini yürütüyor — {len(steps)} adım…", color="dodger_blue1") as write:
-            worker_out = execute_all_steps(steps, task, verbose=False, stream_callback=write)
+            worker_out, usage = execute_all_steps(steps, task, verbose=False, stream_callback=write)
+        update_usage_cb("gemini", usage)
 
         if verbose:
             ui.raw("Worker raw (Gemini)", worker_out, color="dodger_blue1")
@@ -288,6 +297,7 @@ def _execute(
             result.steps.append(StepRecord(
                 index=i, description=step_desc,
                 worker_output=worker_out, result=exec_result,
+                usage=(usage if i == 1 else None) # only attach usage to first step in batch
             ))
             lines_en.append(f"Step {i}: {exec_result.message}")
             if exec_result.kind == "file" and "filename" in exec_result.details:
@@ -302,13 +312,15 @@ def _execute(
         all_results = []
         for i, step_desc in enumerate(steps, start=1):
             with ui.streaming(f"Gemini — adım {i}/{len(steps)}: {step_desc[:55]}…", color="dodger_blue1") as write:
-                worker_out = execute_step(step_desc, "\n".join(context_lines), verbose=False, stream_callback=write)
+                worker_out, usage = execute_step(step_desc, "\n".join(context_lines), verbose=False, stream_callback=write)
+            update_usage_cb("gemini", usage)
             exec_result = parse_and_execute(worker_out)
             all_results.append(exec_result)
 
             result.steps.append(StepRecord(
                 index=i, description=step_desc,
                 worker_output=worker_out, result=exec_result,
+                usage=usage
             ))
             lines_en.append(f"Step {i}: {exec_result.message}")
             context_lines.append(f"Step {i} ({step_desc}): {exec_result.message}")
@@ -334,6 +346,7 @@ def _review_loop(
     max_rounds: int,
     verbose: bool,
     ui,
+    update_usage_cb,
 ) -> list[str]:
     from myagent.agent.reviewer import review as do_review
 
@@ -346,6 +359,7 @@ def _review_loop(
                 round_num=round_num, verbose=False, ui=ui,
                 stream_callback=write,
             )
+        update_usage_cb("claude", rev.usage)
 
         if verbose and rev.feedback_raw:
             ui.raw(f"Reviewer raw (tur {round_num})", rev.feedback_raw, color="cyan2")
@@ -374,7 +388,8 @@ def _review_loop(
         ui.review_fix_steps(rev.fix_steps)
 
         with ui.streaming("Gemini düzeltiyor…", color="dodger_blue1") as write:
-            fix_worker_out = execute_all_steps(rev.fix_steps, task, verbose=False, stream_callback=write)
+            fix_worker_out, fix_usage = execute_all_steps(rev.fix_steps, task, verbose=False, stream_callback=write)
+        update_usage_cb("gemini", fix_usage)
         fix_results = parse_batch_and_execute(fix_worker_out, expected=len(rev.fix_steps))
 
         base = len(result.steps)
@@ -410,6 +425,7 @@ def _completion_loop(
     lines_en: list[str],
     max_rounds: int,
     ui,
+    update_usage_cb,
 ) -> list[str]:
     """Ask Claude to verify the task is truly complete; run extra steps if not."""
     from myagent.agent.completer import verify as do_verify
@@ -420,6 +436,7 @@ def _completion_loop(
             color="medium_purple1",
         ) as write:
             cv = do_verify(task, result.created_files, stream_callback=write)
+        update_usage_cb("claude", cv.usage)
 
         rec = CompletionRecord(
             round_num=round_num,
@@ -441,9 +458,10 @@ def _completion_loop(
         ui.completion_missing(cv.missing_steps)
 
         with ui.streaming("Gemini eksiklikleri tamamlıyor…", color="dodger_blue1") as write:
-            extra_out = execute_all_steps(
+            extra_out, extra_usage = execute_all_steps(
                 cv.missing_steps, task, verbose=False, stream_callback=write,
             )
+        update_usage_cb("gemini", extra_usage)
         extra_results = parse_batch_and_execute(extra_out, expected=len(cv.missing_steps))
 
         base = len(result.steps)

@@ -26,6 +26,8 @@ class ModelInfo:
     aliases: list[str]
     description: str
     provider: str           # "claude" | "gemini"
+    input_price_1m: float = 0.0   # USD per 1M input tokens
+    output_price_1m: float = 0.0  # USD per 1M output tokens
     is_recommended: bool = False
 
 
@@ -39,6 +41,8 @@ CLAUDE_CURATED: list[ModelInfo] = [
         aliases=["opus", "opus4", "opus-4"],
         description="Most capable — best for complex multi-step planning (recommended)",
         provider="claude",
+        input_price_1m=15.0,
+        output_price_1m=75.0,
         is_recommended=True,
     ),
     ModelInfo(
@@ -46,12 +50,16 @@ CLAUDE_CURATED: list[ModelInfo] = [
         aliases=["sonnet", "sonnet4", "sonnet-4"],
         description="Balanced speed and quality — good for most planning tasks",
         provider="claude",
+        input_price_1m=3.0,
+        output_price_1m=15.0,
     ),
     ModelInfo(
         id="claude-haiku-4-5-20251001",
         aliases=["haiku", "haiku4", "haiku-4"],
         description="Fast and lightweight — simple or low-latency tasks",
         provider="claude",
+        input_price_1m=0.25,
+        output_price_1m=1.25,
     ),
 ]
 
@@ -69,6 +77,8 @@ GEMINI_CURATED: list[ModelInfo] = [
         aliases=["2.5-flash", "2.5flash", "2.5", "flash"],
         description="Fast with built-in reasoning — recommended for code generation",
         provider="gemini",
+        input_price_1m=0.1,
+        output_price_1m=0.4,
         is_recommended=True,
     ),
     ModelInfo(
@@ -76,23 +86,31 @@ GEMINI_CURATED: list[ModelInfo] = [
         aliases=["2.5-pro", "2.5pro", "pro"],
         description="Most capable — complex reasoning, best for difficult tasks",
         provider="gemini",
+        input_price_1m=3.5,
+        output_price_1m=10.5,
     ),
     ModelInfo(
         id="gemini-2.0-flash",
         aliases=["2.0-flash", "2.0", "2flash"],
         description="Stable and fast — previous generation, reliable fallback",
         provider="gemini",
+        input_price_1m=0.1,
+        output_price_1m=0.4,
     ),
     ModelInfo(
         id="gemini-3-flash",
         aliases=["3-flash", "3flash"],
         description="Gemini 3 Flash — not yet GA, may return 404",
         provider="gemini",
+        input_price_1m=0.1,
+        output_price_1m=0.4,
     ),
     ModelInfo(
         id="gemini-3.1-pro",
         aliases=["3-pro", "3pro", "3.1-pro"],
         description="Gemini 3.1 Pro — not yet GA, may return 404",
+        input_price_1m=3.5,
+        output_price_1m=10.5,
         provider="gemini",
     ),
 ]
@@ -131,6 +149,19 @@ def resolve_model(name: str, provider: str) -> str:
 
     # 4. Unknown — pass through as-is (user might know a new model ID)
     return name
+
+
+def get_model_cost(model_id: str, provider: str, input_tokens: int, output_tokens: int) -> float:
+    """Calculate the USD cost for the given number of tokens."""
+    curated = CLAUDE_CURATED if provider == "claude" else GEMINI_CURATED
+    info = next((m for m in curated if m.id == model_id), None)
+    if not info:
+        # Fallback to recommended/default pricing if model is unknown
+        info = curated[0]
+    
+    cost = (input_tokens * info.input_price_1m / 1_000_000) + \
+           (output_tokens * info.output_price_1m / 1_000_000)
+    return cost
 
 
 # ---------------------------------------------------------------------------

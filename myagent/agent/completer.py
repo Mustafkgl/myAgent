@@ -58,6 +58,7 @@ class CompletionResult:
     complete: bool
     missing_steps: list[str] = field(default_factory=list)
     feedback: str = ""
+    usage: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +79,10 @@ def verify(
         return CompletionResult(complete=True)
 
     prompt = _build_prompt(task, created_files)
-    raw = _ask_claude(prompt, stream_callback=stream_callback)
-    return _parse(raw)
+    raw, usage = _ask_claude(prompt, stream_callback=stream_callback)
+    res = _parse(raw)
+    res.usage = usage
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +116,7 @@ def _build_prompt(task: str, files: list[str]) -> str:
 # Claude caller (CLI + API, both with optional streaming)
 # ---------------------------------------------------------------------------
 
-def _ask_claude(prompt: str, stream_callback=None) -> str:
+def _ask_claude(prompt: str, stream_callback=None) -> tuple[str, dict | None]:
     from myagent.config.auth import CLI, get_claude_mode, get_claude_model  # noqa: F401
 
     mode = get_claude_mode()
@@ -130,12 +133,16 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
                 from myagent import interrupt
                 deadline = time.time() + 120
                 output = interrupt.readline_interruptible(proc, stream_callback, deadline)
-                return "COMPLETE" if proc.returncode not in (0, None) else output.strip()
+                if proc.returncode not in (0, None):
+                    return "COMPLETE", None
+                return output.strip(), None
             else:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                return "COMPLETE" if result.returncode != 0 else result.stdout.strip()
+                if result.returncode != 0:
+                    return "COMPLETE", None
+                return result.stdout.strip(), None
         except Exception:
-            return "COMPLETE"
+            return "COMPLETE", None
 
     else:  # API mode
         if not ANTHROPIC_API_KEY:
@@ -151,17 +158,21 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
                     messages=[{"role": "user", "content": prompt}],
                 ) as stream:
                     for text in stream.text_stream:
+                    for text in stream.text_stream:
                         stream_callback(text)
-                    return stream.get_final_message().content[0].text.strip()
+                    msg = stream.get_final_message()
+                    usage = {"input": msg.usage.input_tokens, "output": msg.usage.output_tokens}
+                    return msg.content[0].text.strip(), usage
             response = client.messages.create(
                 model=get_claude_model(),
                 max_tokens=512,
                 system=_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text.strip()
+            usage = {"input": response.usage.input_tokens, "output": response.usage.output_tokens}
+            return response.content[0].text.strip(), usage
         except Exception:
-            return "COMPLETE"
+            return "COMPLETE", None
 
 
 # ---------------------------------------------------------------------------

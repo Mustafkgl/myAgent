@@ -40,8 +40,8 @@ def execute_step(
     context: str = "",
     verbose: bool = False,
     stream_callback=None,
-) -> str:
-    """Execute one plan step; returns raw FILE:/BASH: output."""
+) -> tuple[str, dict | None]:
+    """Execute one plan step; returns (raw_output, usage)."""
     from myagent.config.auth import CLI, CLAUDE_WORKER, get_gemini_mode
     mode = get_gemini_mode()
     if verbose:
@@ -50,15 +50,15 @@ def execute_step(
         print(f"  [worker step] {step}", flush=True)
 
     if mode == CLAUDE_WORKER:
-        result = _claude_single(step, context, stream_callback=stream_callback)
+        result, usage = _claude_single(step, context, stream_callback=stream_callback)
     elif mode == CLI:
-        result = _gemini_cli_single(step, context, stream_callback=stream_callback)
+        result, usage = _gemini_cli_single(step, context, stream_callback=stream_callback)
     else:
-        result = _gemini_api_single(step, context, stream_callback=stream_callback)
+        result, usage = _gemini_api_single(step, context, stream_callback=stream_callback)
 
     if verbose:
         print(f"  [worker raw]\n{result}\n", flush=True)
-    return result.strip()
+    return result.strip(), usage
 
 
 # ---------------------------------------------------------------------------
@@ -70,12 +70,11 @@ def execute_all_steps(
     task: str = "",
     verbose: bool = False,
     stream_callback=None,
-) -> str:
+) -> tuple[str, dict | None]:
     """Send ALL steps to the worker in a single call.
 
-    Returns the raw multi-block response (===END=== delimited).
+    Returns (raw_output, usage).
     This is the preferred mode: minimises both call count and Claude token usage.
-    If stream_callback is provided, each output chunk is passed to it in real time.
     """
     from myagent.config.auth import CLI, CLAUDE_WORKER, get_gemini_mode
     mode = get_gemini_mode()
@@ -86,15 +85,15 @@ def execute_all_steps(
     prompt = _build_batch_prompt(steps, task)
 
     if mode == CLAUDE_WORKER:
-        result = _claude_batch(prompt, stream_callback=stream_callback)
+        result, usage = _claude_batch(prompt, stream_callback=stream_callback)
     elif mode == CLI:
-        result = _gemini_cli_batch(prompt, stream_callback=stream_callback)
+        result, usage = _gemini_cli_batch(prompt, stream_callback=stream_callback)
     else:
-        result = _gemini_api_batch(prompt, stream_callback=stream_callback)
+        result, usage = _gemini_api_batch(prompt, stream_callback=stream_callback)
 
     if verbose:
         print(f"  [batch raw output]\n{result}\n", flush=True)
-    return result.strip()
+    return result.strip(), usage
 
 
 def _build_batch_prompt(steps: list[str], task: str) -> str:
@@ -111,7 +110,7 @@ def _build_batch_prompt(steps: list[str], task: str) -> str:
 # Gemini API  (~2s/call)
 # ---------------------------------------------------------------------------
 
-def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> str:
+def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> tuple[str, dict | None]:
     api_key = GEMINI_API_KEY or os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         raise RuntimeError(
@@ -134,17 +133,30 @@ def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> st
     cfg = genai.GenerationConfig(temperature=0.1)
     if stream_callback:
         parts = []
-        for chunk in m.generate_content(prompt, generation_config=cfg, stream=True):
+        res_obj = m.generate_content(prompt, generation_config=cfg, stream=True)
+        for chunk in res_obj:
             t = chunk.text
             if t:
                 parts.append(t)
                 stream_callback(t)
-        return "".join(parts)
+        
+        usage = None
+        try:
+            meta = res_obj.usage_metadata
+            usage = {"input": meta.prompt_token_count, "output": meta.candidates_token_count}
+        except Exception:
+            pass
+        return "".join(parts), usage
+
     response = m.generate_content(prompt, generation_config=cfg)
-    return response.text
+    usage = {
+        "input": response.usage_metadata.prompt_token_count,
+        "output": response.usage_metadata.candidates_token_count,
+    }
+    return response.text, usage
 
 
-def _gemini_api_batch(prompt: str, stream_callback=None) -> str:
+def _gemini_api_batch(prompt: str, stream_callback=None) -> tuple[str, dict | None]:
     api_key = GEMINI_API_KEY or os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY tanımlı değil.")
@@ -159,31 +171,44 @@ def _gemini_api_batch(prompt: str, stream_callback=None) -> str:
     cfg = genai.GenerationConfig(temperature=0.1)
     if stream_callback:
         parts = []
-        for chunk in m.generate_content(prompt, generation_config=cfg, stream=True):
+        res_obj = m.generate_content(prompt, generation_config=cfg, stream=True)
+        for chunk in res_obj:
             t = chunk.text
             if t:
                 parts.append(t)
                 stream_callback(t)
-        return "".join(parts)
+        
+        usage = None
+        try:
+            meta = res_obj.usage_metadata
+            usage = {"input": meta.prompt_token_count, "output": meta.candidates_token_count}
+        except Exception:
+            pass
+        return "".join(parts), usage
+
     response = m.generate_content(prompt, generation_config=cfg)
-    return response.text
+    usage = {
+        "input": response.usage_metadata.prompt_token_count,
+        "output": response.usage_metadata.candidates_token_count,
+    }
+    return response.text, usage
 
 
 # ---------------------------------------------------------------------------
 # Gemini CLI  (~40s/call — use batch to limit to 1 call)
 # ---------------------------------------------------------------------------
 
-def _gemini_cli_single(step: str, context: str = "", stream_callback=None) -> str:
+def _gemini_cli_single(step: str, context: str = "", stream_callback=None) -> tuple[str, dict | None]:
     parts = [_system_prompt(), ""]
     if context:
         parts.append(f"Context:\n{context}")
     parts.append(f"Step to execute: {step}")
-    return _gemini_cli_run("\n".join(parts), stream_callback=stream_callback)
+    return _gemini_cli_run("\n".join(parts), stream_callback=stream_callback), None
 
 
-def _gemini_cli_batch(prompt: str, stream_callback=None) -> str:
+def _gemini_cli_batch(prompt: str, stream_callback=None) -> tuple[str, dict | None]:
     full = _batch_system_prompt() + "\n\n" + prompt
-    return _gemini_cli_run(full, stream_callback=stream_callback)
+    return _gemini_cli_run(full, stream_callback=stream_callback), None
 
 
 def _gemini_cli_run(full_prompt: str, stream_callback=None) -> str:
@@ -214,7 +239,7 @@ def _gemini_cli_stream(full_prompt: str, callback) -> str:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,   # line-buffered; Node may still chunk, but flushes per \\n
+            bufsize=1,   # line-buffered
         )
     except FileNotFoundError:
         raise RuntimeError("`gemini` komutu bulunamadı.")
@@ -260,17 +285,17 @@ def _gemini_stdin(prompt: str, model: str = ""):
 # Claude CLI  (~5s/call — wastes Claude tokens, use only if no Gemini)
 # ---------------------------------------------------------------------------
 
-def _claude_single(step: str, context: str = "", stream_callback=None) -> str:
+def _claude_single(step: str, context: str = "", stream_callback=None) -> tuple[str, dict | None]:
     parts = [_system_prompt(), ""]
     if context:
         parts.append(f"Context:\n{context}")
     parts.append(f"Step to execute: {step}")
-    return _claude_run("\n".join(parts), stream_callback=stream_callback)
+    return _claude_run("\n".join(parts), stream_callback=stream_callback), None
 
 
-def _claude_batch(prompt: str, stream_callback=None) -> str:
+def _claude_batch(prompt: str, stream_callback=None) -> tuple[str, dict | None]:
     full = _batch_system_prompt() + "\n\n" + prompt
-    return _claude_run(full, stream_callback=stream_callback)
+    return _claude_run(full, stream_callback=stream_callback), None
 
 
 def _claude_run(full_prompt: str, stream_callback=None) -> str:

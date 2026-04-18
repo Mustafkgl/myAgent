@@ -31,6 +31,7 @@ class ReviewResult:
     feedback_raw: str = ""
     round_num: int = 1
     error_count: int = 0          # ruff error count — used for heuristic exit
+    usage: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -74,11 +75,12 @@ def review(
     if lint_issues:
         file_contents = _read_files(py_files)
         context = _build_lint_prompt(task, lint_issues, file_contents)
-        raw = _ask_claude(context, stream_callback=stream_callback)
+        raw, usage = _ask_claude(context, stream_callback=stream_callback)
         if _ui:
             _ui.raw(f"Reviewer Claude (lint, tur {round_num})", raw, color="cyan2")
         result = _parse(raw, round_num)
         result.error_count = len(lint_issues)
+        result.usage = usage
         return result
 
     # ── Step 3: tests ─────────────────────────────────────────────────────────
@@ -92,11 +94,12 @@ def review(
 
     # ── Step 4: test failed → Claude ─────────────────────────────────────────
     context = _build_test_prompt(task, test_failures)
-    raw = _ask_claude(context, stream_callback=stream_callback)
+    raw, usage = _ask_claude(context, stream_callback=stream_callback)
     if _ui:
         _ui.raw(f"Reviewer Claude (test, tur {round_num})", raw, color="cyan2")
     result = _parse(raw, round_num)
     result.error_count = len(test_failures)
+    result.usage = usage
     return result
 
 
@@ -246,7 +249,7 @@ def _read_files(filenames: list[str]) -> dict[str, str]:
 # Claude call
 # ---------------------------------------------------------------------------
 
-def _ask_claude(prompt: str, stream_callback=None) -> str:
+def _ask_claude(prompt: str, stream_callback=None) -> tuple[str, dict | None]:
     from myagent.config.auth import CLI, get_claude_mode, get_claude_model
     mode = get_claude_mode()
     system = (PROMPTS_DIR / "reviewer.txt").read_text(encoding="utf-8")
@@ -264,15 +267,15 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
                 deadline = time.time() + 120
                 output = interrupt.readline_interruptible(proc, stream_callback, deadline)
                 if proc.returncode not in (0, None):
-                    return "APPROVED"
-                return output.strip()
+                    return "APPROVED", None
+                return output.strip(), None
             else:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
                 if result.returncode != 0:
-                    return "APPROVED"
-                return result.stdout.strip()
+                    return "APPROVED", None
+                return result.stdout.strip(), None
         except Exception:
-            return "APPROVED"
+            return "APPROVED", None
     else:
         if not ANTHROPIC_API_KEY:
             return "APPROVED"
@@ -288,16 +291,19 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
                 ) as stream:
                     for text in stream.text_stream:
                         stream_callback(text)
-                    return stream.get_final_message().content[0].text.strip()
+                    msg = stream.get_final_message()
+                    usage = {"input": msg.usage.input_tokens, "output": msg.usage.output_tokens}
+                    return msg.content[0].text.strip(), usage
             response = client.messages.create(
                 model=get_claude_model(),
                 max_tokens=1024,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text.strip()
+            usage = {"input": response.usage.input_tokens, "output": response.usage.output_tokens}
+            return response.content[0].text.strip(), usage
         except Exception:
-            return "APPROVED"
+            return "APPROVED", None
 
 
 # ---------------------------------------------------------------------------

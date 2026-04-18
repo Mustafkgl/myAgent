@@ -83,6 +83,8 @@ _COMMANDS: list[tuple[str, str]] = [
     ("/rename",   "Oturumu yeniden adlandır  →  /rename <yeni ad>"),
     ("/sessions", "Kayıtlı oturumları listele"),
     ("/status",   "Oturum istatistiklerini göster"),
+    ("/stats",    "Token kullanımı ve maliyet analitiği"),
+    ("/telemetry","Canlı token sayacını aç / kapat"),
     ("/theme",    "Temayı değiştir  →  /theme dark|light"),
     ("/think",    "Ayrıntılı çıktı modunu aç / kapat"),
 ]
@@ -127,10 +129,39 @@ class TuiAgentUI(AgentUI):
         self._log(Text(f"  ℹ {notice}", style=C_DIM))
 
     def summary(self, success: bool, review_approved: bool,
-                n_review_rounds: int, created_files: list[str]) -> None:
+                n_review_rounds: int, created_files: list[str],
+                usage: dict[str, dict[str, int]] = None) -> None:
         status = "✓ Tamamlandı" if success else "✗ Hatalarla tamamlandı"
         color = C_OK if success else C_WARN
         self._log(Text(f"\n  {status}\n", style=f"bold {color}"))
+
+        if usage:
+            from myagent.models import get_model_cost
+            from myagent.config.auth import get_claude_model, get_gemini_model
+            c_model = get_claude_model()
+            g_model = get_gemini_model()
+            
+            c_cost = get_model_cost(c_model, "claude", usage["claude"]["input"], usage["claude"]["output"])
+            g_cost = get_model_cost(g_model, "gemini", usage["gemini"]["input"], usage["gemini"]["output"])
+            total_cost = c_cost + g_cost
+
+            # Estimate cost if all was done by Claude (planner model)
+            # Worker tasks are usually much larger than planning tasks
+            total_in = usage["claude"]["input"] + usage["gemini"]["input"]
+            total_out = usage["claude"]["output"] + usage["gemini"]["output"]
+            all_claude_cost = get_model_cost(c_model, "claude", total_in, total_out)
+            savings = max(0, all_claude_cost - total_cost)
+
+            info = Text.assemble(
+                ("\n  Maliyet: ", C_DIM), (f"${total_cost:.4f}", C_OK),
+                ("  (Tasarruf: ", C_DIM), (f"${savings:.4f}", "bold green"), (")", C_DIM),
+                ("\n  Token:   ", C_DIM),
+                (f"{usage['claude']['input']+usage['claude']['output']} Claude", C_CLAUDE),
+                ("  /  ", C_DIM),
+                (f"{usage['gemini']['input']+usage['gemini']['output']} Gemini", C_GEMINI),
+                ("\n", "")
+            )
+            self._log(info)
 
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
@@ -215,6 +246,8 @@ class MyAgentApp(App):
         if not self.session.chat:
             self.session.chat = Chat()
         self.ui_bridge = TuiAgentUI(self)
+        self.telemetry_enabled = True
+        self.cumulative_usage = {"claude": {"input": 0, "output": 0}, "gemini": {"input": 0, "output": 0}}
 
     # ── Layout ───────────────────────────────────────────────────────────────
 
@@ -401,6 +434,12 @@ class MyAgentApp(App):
         elif cmd in ("status", "durum", "istatistik"):
             self._cmd_status()
 
+        elif cmd in ("stats", "maliyet", "analiz"):
+            self._cmd_stats()
+
+        elif cmd in ("telemetry", "telemetri", "tokens"):
+            self._cmd_telemetry()
+
         elif cmd in ("config", "yapılandırma", "yapilandirma"):
             self._cmd_config()
 
@@ -506,14 +545,50 @@ class MyAgentApp(App):
         table.add_column()
 
         for cat, status, msg in results:
-            color = C_OK if status == "✓" else (C_ERR if status == "✗" else C_WARN)
-            if status == "dim content": # Special case from doctor.py
-                status = "!"
-                color = C_DIM
+            color = C_OK if "✓" in status else (C_ERR if "✗" in status else C_WARN)
             table.add_row(cat, Text(status, style=f"bold {color}"), Text(msg, style="white"))
         
         self.log_message(table)
         self.log_message(Text("\n  ✓ Kontrol tamamlandı. Herhangi bir '✗' hatası varsa lütfen düzeltin.\n", style=C_DIM))
+
+    def _cmd_stats(self) -> None:
+        from myagent.models import get_model_cost
+        from myagent.config.auth import get_claude_model, get_gemini_model
+        from rich.table import Table
+
+        c_model = get_claude_model()
+        g_model = get_gemini_model()
+        
+        usage = self.cumulative_usage
+        c_cost = get_model_cost(c_model, "claude", usage["claude"]["input"], usage["claude"]["output"])
+        g_cost = get_model_cost(g_model, "gemini", usage["gemini"]["input"], usage["gemini"]["output"])
+        
+        table = Table(title="Token ve Maliyet Analizi", box=None, show_header=True)
+        table.add_column("Model", style="bold")
+        table.add_column("Input", justify="right")
+        table.add_column("Output", justify="right")
+        table.add_column("Maliyet", justify="right", style="green")
+
+        table.add_row("Claude (Planlayıcı)", str(usage["claude"]["input"]), str(usage["claude"]["output"]), f"${c_cost:.4f}")
+        table.add_row("Gemini (İşçi)", str(usage["gemini"]["input"]), str(usage["gemini"]["output"]), f"${g_cost:.4f}")
+        table.add_section()
+        table.add_row("TOPLAM", "", "", f"${c_cost + g_cost:.4f}", style="bold yellow")
+
+        self.log_message(table)
+        
+        # Savings calculation
+        total_in = usage["claude"]["input"] + usage["gemini"]["input"]
+        total_out = usage["claude"]["output"] + usage["gemini"]["output"]
+        all_claude_cost = get_model_cost(c_model, "claude", total_in, total_out)
+        savings = max(0, all_claude_cost - (c_cost + g_cost))
+        
+        if savings > 0:
+            self.log_message(Text(f"  💡 Bilinçli Asimetri sayesinde tahmini tasarruf: ${savings:.4f}\n", style="bold green"))
+
+    def _cmd_telemetry(self) -> None:
+        self.telemetry_enabled = not self.telemetry_enabled
+        status = "açık" if self.telemetry_enabled else "kapalı"
+        self.log_message(Text(f"  ✓ Canlı telemetri şu an {status}.\n", style=C_OK))
 
     def _cmd_auth(self) -> None:
         mask = lambda k: f"{k[:8]}...{k[-4:]}" if len(k) > 12 else ("eksik" if not k else "***")
@@ -730,9 +805,24 @@ class MyAgentApp(App):
             )
             result = await loop.run_in_executor(None, fn)
             elapsed = time.time() - t0
+            
+            # Update cumulative usage
+            for prov in ["claude", "gemini"]:
+                self.cumulative_usage[prov]["input"] += result.usage[prov]["input"]
+                self.cumulative_usage[prov]["output"] += result.usage[prov]["output"]
+
             self.session.update(result)
             if self.session.chat:
                 self.session.chat.add_task_result(result.task_original, result.summary_en)
+            
+            # Show summary with telemetry if enabled
+            if self.telemetry_enabled:
+                self.ui_bridge.summary(
+                    result.success, result.review_approved,
+                    len(result.review_records), result.created_files,
+                    usage=result.usage
+                )
+
             files = ", ".join(result.created_files[:4]) or "—"
             self.log_message(Text.assemble(
                 ("\n  ✓ ", f"bold {C_OK}"),

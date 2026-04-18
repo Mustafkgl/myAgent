@@ -344,9 +344,10 @@ def _review_loop(
     verbose: bool,
     ui,
 ) -> list[str]:
+    import hashlib
     from myagent.agent.reviewer import review as do_review
 
-    prev_error_count: int | None = None
+    prev_error_hash: str | None = None
 
     for round_num in range(1, max_rounds + 1):
         with ui.streaming(f"Review — Claude analiz ediyor (tur {round_num}/{max_rounds})…", color="cyan2") as write:
@@ -374,11 +375,12 @@ def _review_loop(
             result.review_approved = False
             break
 
-        if prev_error_count is not None and rev.error_count >= prev_error_count:
+        error_hash = hashlib.md5(rev.feedback_raw.encode()).hexdigest()[:8]
+        if error_hash == prev_error_hash:
             ui.review_stuck(rev.error_count)
             result.review_approved = False
             break
-        prev_error_count = rev.error_count
+        prev_error_hash = error_hash
 
         ui.review_fix_steps(rev.fix_steps)
 

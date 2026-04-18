@@ -34,6 +34,9 @@ ABSOLUTE RULES — no exceptions
 6. FILE mode: write the COMPLETE file. No truncation. No "# ... rest of file".
 7. No markdown code fences (``` backticks). No explanations. No commentary.
 8. If a step is impossible: BASH: echo "STEP_FAILED: <reason>"  ===END===
+9. CRITICAL — when fixing an existing file: preserve ALL function signatures exactly.
+   Only change the specific lines needed to fix the reported issue.
+   Do NOT rename functions, add/remove parameters, or change return types.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXAMPLE — 3-step plan (all writing to the same file)

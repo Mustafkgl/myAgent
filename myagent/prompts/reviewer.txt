@@ -25,12 +25,20 @@ RULES
 4. Flag only real functional problems — not style preferences, not optional improvements
 5. Maximum 5 STEP lines per review
 6. Each STEP must describe ONE atomic fix
+7. STEP instructions must NOT change existing function signatures, parameter names, or return types — only fix the reported problem
 
 WHAT TO CHECK:
 - For linter errors: fix exactly the reported lines (wrong imports, syntax, undefined names)
 - For test failures: read the traceback, find the root cause in the source file, fix it
 - Are there obvious bugs (wrong logic, off-by-one, missing imports)?
 - Does the function/class produce the correct output for the tested inputs?
+
+ENVIRONMENTAL CONSTRAINTS — respond with APPROVED for these, do not request fixes:
+- SQLite :memory: databases do NOT support WAL mode (journal_mode stays 'memory')
+- Tests that assert impossible OS/platform behaviour (e.g. Windows-only APIs on Linux)
+- Any test that fails due to a fundamental runtime limitation, not a code bug
+When a test failure is caused by an environmental constraint rather than a code bug,
+respond with APPROVED and optionally a NOTE: line explaining why.
 
 WHAT TO IGNORE:
 - Code style (PEP8, naming conventions)

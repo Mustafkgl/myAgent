@@ -20,7 +20,9 @@ from typing import TYPE_CHECKING
 
 from myagent.agent.executor import ExecutionResult, parse_and_execute, parse_batch_and_execute
 from myagent.agent.planner import plan
+from myagent.agent.state import PipelineState, new_session_id, phase_done, save_state
 from myagent.agent.worker import execute_all_steps, execute_step, set_interface_contract
+from myagent.config.settings import WORK_DIR
 from myagent.i18n.translator import en_to_tr
 
 if TYPE_CHECKING:
@@ -92,6 +94,7 @@ def run(
     max_completion_rounds: int = 2,
     session_context: str = "",
     ui: AgentUI | NullUI | None = None,
+    resume_state: PipelineState | None = None,
 ) -> RunResult:
     """Execute the full agentic pipeline for *task*."""
     from myagent.ui import make_ui
@@ -100,8 +103,22 @@ def run(
     if ui is None:
         ui = make_ui(verbose=verbose)
 
-    t_start = time.time()
+    t_start = resume_state.started_at if resume_state else time.time()
     result = RunResult(task_original=task, task_english=task, dry_run=dry_run, batch=batch)
+
+    # Build pipeline state (new or continuing from checkpoint)
+    ps = PipelineState(
+        session_id=resume_state.session_id if resume_state else new_session_id(),
+        task=task,
+        work_dir=str(WORK_DIR),
+        phase="started",
+        started_at=t_start,
+    )
+    if resume_state:
+        ps.steps = resume_state.steps
+        ps.interface_contract = resume_state.interface_contract
+        ps.created_files = resume_state.created_files
+        ps.review_round = resume_state.review_round
 
     ui.header(task, get_claude_model(), get_gemini_model())
 
@@ -114,33 +131,46 @@ def run(
     result.clarified_task = task
 
     # ── 2. Plan ─────────────────────────────────────────────────────────────
-    _planner_buf: list[str] = []
+    if resume_state and phase_done(resume_state.phase, "planned"):
+        steps = resume_state.steps
+        interface_contract = resume_state.interface_contract
+        set_interface_contract(interface_contract)
+        result.plan_steps = steps
+        ui.plan_done(steps)
+        print(f"  [resume] Planlama atlandı — {len(steps)} adım yüklendi.", flush=True)
+    else:
+        _planner_buf: list[str] = []
 
-    def _planner_write(chunk: str) -> None:
-        _planner_buf.append(chunk)
-        write(chunk)  # forward to streaming UI
+        def _planner_write(chunk: str) -> None:
+            _planner_buf.append(chunk)
+            write(chunk)  # forward to streaming UI
 
-    with ui.streaming("Claude planlıyor…", color="medium_purple1") as write:
-        steps, interface_contract = plan(
-            task, verbose=False,
-            stream_callback=_planner_write,
-            session_context=session_context,
-        )
-    result.plan_steps = steps
-    _last_raw["planner"] = "".join(_planner_buf)
-    set_interface_contract(interface_contract)
+        with ui.streaming("Claude planlıyor…", color="medium_purple1") as write:
+            steps, interface_contract = plan(
+                task, verbose=False,
+                stream_callback=_planner_write,
+                session_context=session_context,
+            )
+        result.plan_steps = steps
+        _last_raw["planner"] = "".join(_planner_buf)
+        set_interface_contract(interface_contract)
 
-    if verbose:
-        from myagent.config.auth import get_claude_model as gcm
-        ui.raw(f"Planner raw ({gcm()})", _last_raw["planner"], color="medium_purple1")
+        if verbose:
+            from myagent.config.auth import get_claude_model as gcm
+            ui.raw(f"Planner raw ({gcm()})", _last_raw["planner"], color="medium_purple1")
 
-    if not steps:
-        result.summary_en = "No steps were generated."
-        result.summary_tr = en_to_tr(result.summary_en)
-        result.success = False
-        return result
+        if not steps:
+            result.summary_en = "No steps were generated."
+            result.summary_tr = en_to_tr(result.summary_en)
+            result.success = False
+            return result
 
-    ui.plan_done(steps)
+        ui.plan_done(steps)
+
+        ps.steps = steps
+        ps.interface_contract = interface_contract
+        ps.phase = "planned"
+        _save_ps(ps)
 
     if dry_run:
         result.summary_en = f"Dry run: {len(steps)} steps planned (not executed)."
@@ -148,33 +178,52 @@ def run(
         return result
 
     # ── 3. Execute ───────────────────────────────────────────────────────────
-    lines_en = _execute(steps, task, batch, verbose, result, ui)
+    if resume_state and phase_done(resume_state.phase, "executed"):
+        result.created_files = list(resume_state.created_files)
+        lines_en = [f"[resume] {len(result.created_files)} dosya yüklendi."]
+        print(f"  [resume] Yürütme atlandı — {len(result.created_files)} dosya mevcut.", flush=True)
+    else:
+        lines_en = _execute(steps, task, batch, verbose, result, ui)
 
-    # ── 3a. Missing-file recovery ────────────────────────────────────────────
-    retry_steps = _find_missing_steps(steps, result.created_files)
-    if retry_steps:
-        ui.missing_files_retry(retry_steps)
-        extra_lines = _execute(retry_steps, task, batch, verbose, result, ui)
-        lines_en.extend(extra_lines)
+        # ── 3a. Missing-file recovery ─────────────────────────────────────────
+        retry_steps = _find_missing_steps(steps, result.created_files)
+        if retry_steps:
+            ui.missing_files_retry(retry_steps)
+            extra_lines = _execute(retry_steps, task, batch, verbose, result, ui)
+            lines_en.extend(extra_lines)
 
-    # ── 3b. Dependency management ─────────────────────────────────────────────
-    if result.created_files:
-        from myagent.agent.deps import scan_and_install
-        py_files = [f for f in result.created_files if f.endswith(".py")]
-        if py_files:
-            scan_and_install(py_files, auto=auto_deps, verbose=verbose, ui=ui)
+        # ── 3b. Dependency management ──────────────────────────────────────────
+        if result.created_files:
+            from myagent.agent.deps import scan_and_install
+            py_files = [f for f in result.created_files if f.endswith(".py")]
+            if py_files:
+                scan_and_install(py_files, auto=auto_deps, verbose=verbose, ui=ui)
+
+        ps.created_files = result.created_files
+        ps.phase = "executed"
+        _save_ps(ps)
 
     # ── 4. Review loop ────────────────────────────────────────────────────────
     # Run review whenever files were created — BASH step failures (e.g. a pytest
     # run that fails) are exactly what the reviewer is meant to catch and fix.
     if review and result.created_files:
-        lines_en = _review_loop(task, result, lines_en, max_review_rounds, verbose, ui)
+        # Determine which review rounds are already done when resuming
+        resume_review_round = 0
+        if resume_state and resume_state.phase.startswith("review_"):
+            try:
+                resume_review_round = int(resume_state.phase.split("_", 1)[1])
+            except (ValueError, IndexError):
+                pass
+        lines_en = _review_loop(task, result, lines_en, max_review_rounds, verbose, ui, ps, resume_review_round)
 
     # ── 5. Completion verification loop ──────────────────────────────────────
     if verify_completion and result.created_files:
         lines_en = _completion_loop(
             task, result, lines_en, max_completion_rounds, ui,
         )
+        if ps:
+            ps.created_files = result.created_files
+            _save_ps(ps)
 
     # ── 6. Summary ────────────────────────────────────────────────────────────
     # If review approved the output, promote overall success regardless of any
@@ -224,7 +273,23 @@ def run(
     except Exception:
         pass
 
+    # ── 9. Mark pipeline state complete ──────────────────────────────────────
+    ps.phase = "complete"
+    ps.created_files = result.created_files
+    _save_ps(ps)
+
     return result
+
+
+# ---------------------------------------------------------------------------
+# State save helper (silently ignores errors — pipeline must not crash on save)
+# ---------------------------------------------------------------------------
+
+def _save_ps(ps: PipelineState) -> None:
+    try:
+        save_state(ps)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +408,8 @@ def _review_loop(
     max_rounds: int,
     verbose: bool,
     ui,
+    ps: PipelineState | None = None,
+    skip_rounds: int = 0,
 ) -> list[str]:
     import hashlib
     from myagent.agent.reviewer import review as do_review
@@ -350,6 +417,9 @@ def _review_loop(
     prev_error_hash: str | None = None
 
     for round_num in range(1, max_rounds + 1):
+        if round_num <= skip_rounds:
+            print(f"  [resume] Review turu {round_num} atlandı.", flush=True)
+            continue
         with ui.streaming(f"Review — Claude analiz ediyor (tur {round_num}/{max_rounds})…", color="cyan2") as write:
             rev = do_review(
                 task, result.created_files,
@@ -369,6 +439,11 @@ def _review_loop(
         if rev.approved:
             result.review_approved = True
             ui.review_approved(round_num)
+            if ps:
+                ps.phase = f"review_{round_num}"
+                ps.review_round = round_num
+                ps.created_files = result.created_files
+                _save_ps(ps)
             break
 
         if not rev.fix_steps:
@@ -381,6 +456,14 @@ def _review_loop(
             result.review_approved = False
             break
         prev_error_hash = error_hash
+
+        # Save state before executing fixes (in case of crash during fix)
+        if ps:
+            ps.phase = f"review_{round_num}"
+            ps.review_round = round_num
+            ps.fix_steps = rev.fix_steps
+            ps.created_files = result.created_files
+            _save_ps(ps)
 
         ui.review_fix_steps(rev.fix_steps)
 

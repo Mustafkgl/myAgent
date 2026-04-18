@@ -358,6 +358,14 @@ def _build_parser() -> argparse.ArgumentParser:
     util_grp.add_argument(
         "--version", action="version", version=f"myagent {__version__}",
     )
+    util_grp.add_argument(
+        "--resume", nargs="?", const="", metavar="SESSION_ID",
+        help="Resume last incomplete pipeline session (or a specific SESSION_ID)",
+    )
+    util_grp.add_argument(
+        "--sessions", action="store_true",
+        help="List all pipeline sessions (completed and incomplete), then exit",
+    )
 
     # ── Positional (one-shot mode) ───────────────────────────────────────────
     p.add_argument(
@@ -461,6 +469,74 @@ def _show_config() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Pipeline session helpers
+# ---------------------------------------------------------------------------
+
+def _show_pipeline_sessions() -> None:
+    from myagent.agent.state import list_sessions
+    from datetime import datetime
+
+    sessions = list_sessions()
+    if not sessions:
+        print("Kayıtlı pipeline oturumu yok.")
+        return
+
+    print(f"\n  Pipeline oturumları ({len(sessions)}):\n")
+    for i, s in enumerate(sessions, 1):
+        ts = datetime.fromtimestamp(s.updated_at).strftime("%Y-%m-%d %H:%M")
+        icon = "✓" if s.phase == "complete" else "⏸"
+        task_short = s.task[:60] + ("…" if len(s.task) > 60 else "")
+        print(f"  {i:2d}. {icon} [{s.session_id}]  {ts}  phase={s.phase}")
+        print(f"       {task_short}")
+    print()
+
+
+def _handle_resume(
+    session_id: str,
+    verbose: bool = False,
+    batch: bool = True,
+    review: bool = True,
+    max_review_rounds: int = 4,
+    auto_deps: bool = False,
+    verify_completion: bool = True,
+    max_completion_rounds: int = 2,
+) -> None:
+    from myagent.agent.state import load_latest_incomplete, load_session
+
+    if session_id:
+        state = load_session(session_id)
+        if state is None:
+            print(f"Hata: '{session_id}' ID'li oturum bulunamadı.", file=sys.stderr)
+            sys.exit(1)
+    else:
+        state = load_latest_incomplete()
+        if state is None:
+            print("Devam edilecek tamamlanmamış oturum bulunamadı.")
+            return
+
+    if state.phase == "complete":
+        print(f"Oturum [{state.session_id}] zaten tamamlandı.")
+        return
+
+    print(f"\n▶  Oturum devam ettiriliyor [{state.session_id}]  phase={state.phase}")
+    print(f"   Görev: {state.task[:80]}\n")
+
+    _handle_run(
+        state.task,
+        verbose=verbose,
+        dry_run=False,
+        batch=batch,
+        review=review,
+        max_review_rounds=max_review_rounds,
+        auto_deps=auto_deps,
+        verify_completion=verify_completion,
+        max_completion_rounds=max_completion_rounds,
+        session=None,
+        resume_state=state,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Run handler (shared by REPL and one-shot)
 # ---------------------------------------------------------------------------
 
@@ -478,6 +554,7 @@ def _handle_run(
     max_completion_rounds: int = 2,
     session: "SessionState | None" = None,
     session_context: str = "",
+    resume_state=None,
 ) -> "RunResult | None":
     if not task.strip():
         print("Kullanım: /run <görev açıklaması>")
@@ -508,6 +585,7 @@ def _handle_run(
             verify_completion=verify_completion,
             max_completion_rounds=max_completion_rounds,
             session_context=session_context,
+            resume_state=resume_state,
         )
     except RuntimeError as exc:
         print(f"Hata: {exc}")
@@ -977,6 +1055,23 @@ def main() -> None:
 
     if args.config:
         _show_config()
+        return
+
+    if args.sessions:
+        _show_pipeline_sessions()
+        return
+
+    if args.resume is not None:
+        _handle_resume(
+            args.resume,
+            verbose=args.verbose,
+            batch=not args.sequential,
+            review=not args.no_review,
+            max_review_rounds=args.max_review_rounds,
+            auto_deps=args.auto_deps,
+            verify_completion=not getattr(args, "no_complete", False),
+            max_completion_rounds=getattr(args, "max_completion_rounds", 2),
+        )
         return
 
     # ── 4. First-run wizard ──────────────────────────────────────────────────

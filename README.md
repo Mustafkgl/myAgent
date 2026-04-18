@@ -1,20 +1,27 @@
 
-```
-                    ___                       _
-                   / _ \                     | |
- _ __ ___   _   _ / /_\ \  __ _   ___  _ __  | |_
-| '_ ` _ \ | | | ||  _  | / _` | / _ \| '_ \ | __|
-| | | | | || |_| || | | || (_| ||  __/| | | || |_
-|_| |_| |_| \__, |\_| |_/ \__, | \___||_| |_| \__|
-             __/ |         __/ |
-            |___/         |___/
-```
-
 <div align="center">
 
-**Claude düşünür. Gemini çalışır. Sen sadece ne istediğini söylersin.**
+```
+                              █████████
+                             ███░░░░░███
+ █████████████   █████ ████ ░███    ░███   ███████  ██████  ████████   █████
+░░███░░███░░███ ░░███ ░███  ░███████████  ███░░███ ███░░███░░███░░███ ░░███
+ ░███ ░███ ░███  ░███ ░███  ░███░░░░░███ ░███ ░███░███████  ░███ ░███ ███████
+ ░███ ░███ ░███  ░███ ░███  ░███    ░███ ░███ ░███░███░░░   ░███ ░███░░░███░
+ █████░███ █████ ░░███████  █████   █████░░███████░░██████  ████ ████  ░███
+░░░░░ ░░░ ░░░░░   ░░░░░███ ░░░░░   ░░░░░  ░░░░░███ ░░░░░░  ░░░░ ░░░░░  ░███ ███
+                  ███ ░███                ███ ░███                     ░░█████
+                 ░░██████                ░░██████                       ░░░░░
+                  ░░░░░░                  ░░░░░░
+```
 
-*Terminal tabanlı çift-model AI ajanı — planlama, yürütme, review, hafıza*
+### Claude düşünür — Gemini çalışır — Sen sadece ne istediğini söylersin
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![Claude](https://img.shields.io/badge/Planner-Claude-D97706?style=flat-square)
+![Gemini](https://img.shields.io/badge/Worker-Gemini-4285F4?style=flat-square)
+![Textual](https://img.shields.io/badge/TUI-Textual-6D28D9?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
 </div>
 
@@ -24,44 +31,103 @@
 
 Çoğu AI ajanı aynı modeli tekrar tekrar çağırır. myAgent farklı bir yaklaşım benimser: **bilinçli asimetri.**
 
-```
-Kullanıcı girişi
-       │
-       ▼
-  Claude (Planner)          ← akıllı, pahalı — sadece yönetir
-  "3 adımda yap..."
-       │
-       ▼
-  Gemini (Worker)           ← hızlı, ücretsiz — tüm ağır işi yapar
-  FILE: main.py ...
-  BASH: pytest ...
-       │
-       ▼
-  Claude (Reviewer)         ← kodu inceler, hataları yakalar
-  "LGTM / Şunu düzelt..."
-       │
-       ▼
-  Claude (Verifier)         ← eksik bir şey var mı kontrol eder
-  "COMPLETE"
-       │
-       ▼
-  Sonuç — /workspace
-```
+> Pahalı modeli sadece beyne ver. Bedava modeli kola.
 
-**Neden önemli:** Claude Code ile aynı işi yaparken Claude token harcamanın onda birine çalışırsın. Pahalı modeli sadece beyne ver, bedava modeli kola.
+Claude Code ile aynı işi yaparken token harcamanın onda birine çalışırsın — Claude yalnızca planlar ve inceler, Gemini tüm ağır işi ücretsiz olarak yürütür.
+
+---
+
+## Mimari
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║                        myAgent Pipeline                          ║
+╚══════════════════════════════════════════════════════════════════╝
+
+  Sen                                                          Sen
+  │                                                             ▲
+  │  "basit bir şifre üreteci yaz"                              │
+  ▼                                                             │
+┌─────────────────────────────────┐                   ┌─────────────────┐
+│   Chat Router  (Claude)         │──── Soru ─────────▶  Markdown cevap │
+│                                 │                   └─────────────────┘
+│   Görev mi? → Pipeline başlat   │
+└──────────────┬──────────────────┘
+               │  Görev
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Planner  (Claude)                                               │
+│                                                                  │
+│  STEP 1: Create password_gen.py with generate(length, symbols)   │
+│  STEP 2: Add CLI argparse interface                              │
+│  STEP 3: Run python password_gen.py --test                       │
+└──────────────┬───────────────────────────────────────────────────┘
+               │  Plan
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Worker  (Gemini)                                                │
+│                                                                  │
+│  FILE: password_gen.py  ···  BASH: python password_gen.py        │
+│  Tüm adımlar tek çağrıda — ücretsiz, hızlı, paralel             │
+└──────────────┬───────────────────────────────────────────────────┘
+               │  Dosyalar + çıktı
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Reviewer  (Claude)                                              │
+│                                                                  │
+│  ruff lint → pytest → "LGTM" veya "Şunu düzelt: …"              │
+│  Hata varsa Gemini'ye düzeltme gönderilir  (maks 2 tur)         │
+└──────────────┬───────────────────────────────────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Verifier  (Claude)                                              │
+│                                                                  │
+│  "COMPLETE" → bitti    "INCOMPLETE: STEP 2" → tekrar döngü      │
+└──────────────┬───────────────────────────────────────────────────┘
+               │
+               ▼
+         /workspace  ✓
+```
 
 ---
 
 ## Özellikler
 
-- **TUI modu** — tam ekran Textual arayüzü, `/` ile komut otomatik tamamlama
-- **REPL modu** — klasik terminal, aynı güç
-- **Çift model pipeline** — Claude planlar+inceler, Gemini yürütür
-- **Konuşma hafızası** — "bunu düzelt", "test ekle" gibi doğal referanslar çalışır
-- **Session kalıcılığı** — oturumlar JSON'a kaydedilir, isimlendirilir, geri yüklenir
-- **Canlı yeniden boyutlandırma** — terminal resize olunca içerik anında reflow olur
-- **Auth esnekliği** — API key veya OAuth (Claude Code / Gemini CLI)
-- **Güvenli yürütme** — path traversal koruması, `shell=False` zorunluluğu
+```
+                          myAgent
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+       Arayüz            Pipeline           Güvenlik
+          │                  │                  │
+    ┌─────┴─────┐      ┌─────┴─────┐      ┌─────┴─────┐
+    │           │      │           │      │           │
+   TUI        REPL  Çift Model  Hafıza  Sandbox    Path Guard
+    │                  │           │
+  Slash             Claude +    JSON
+ Komutları         Gemini     Geçmişi
+    │
+  /auth
+  /model
+  /export
+  /compact
+  ...
+```
+
+| | Özellik | Açıklama |
+|---|---|---|
+| **Arayüz** | TUI modu | Tam ekran Textual — `/` ile komut otomatik tamamlama |
+| | REPL modu | Klasik terminal, aynı güç |
+| | One-shot | `myagent "görev"` tek satırda çalışır |
+| **Pipeline** | Çift model | Claude planlar + inceler, Gemini yürütür |
+| | Review döngüsü | ruff + pytest + Claude otomatik düzeltme |
+| | Completion verify | Görev tamamlanmadan pipeline kapanmaz |
+| **Hafıza** | Session kalıcılığı | Oturumlar JSON'a kaydedilir, isimlendirilir |
+| | Görev geçmişi | "bunu düzelt", "test ekle" doğal çalışır |
+| **Teknik** | Canlı reflow | Terminal resize olunca içerik anında yeniden düzenlenir |
+| | Auth esnekliği | API key veya OAuth (Claude Code / Gemini CLI) |
+| | Docker sandbox | Tam izole çalışma ortamı |
 
 ---
 
@@ -72,77 +138,75 @@ Kullanıcı girişi
 | Gereksinim | Açıklama |
 |---|---|
 | Python 3.10+ | |
-| **Claude için** | `ANTHROPIC_API_KEY` **veya** Claude Code CLI (`claude login`) |
-| **Gemini için** | `GEMINI_API_KEY` **veya** Gemini CLI (`gemini login`) |
+| **Claude için** | `ANTHROPIC_API_KEY` **ya da** Claude Code CLI (`claude login`) |
+| **Gemini için** | `GEMINI_API_KEY` **ya da** Gemini CLI (`gemini login`) |
 
-> Claude Code CLI kullanıyorsan API key'e gerek yok. Aboneliğin (Pro/Max) doğrudan kullanılır.
+> Claude Code aboneliğin (Pro/Max) varsa API key gerekmez — myAgent direkt kullanır.
+
+---
 
 ### Seçenek A — Python venv
 
 ```bash
 git clone https://github.com/Mustafkgl/myAgent.git
-cd myAgent/myagent
+cd myAgent
 
-# uv (önerilir, daha hızlı)
-uv venv .venv && source .venv/bin/activate
-uv pip install -e .
+# uv (önerilir)
+uv venv .venv && source .venv/bin/activate && uv pip install -e .
 
-# ya da standart pip
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
+# ya da pip
+python -m venv .venv && source .venv/bin/activate && pip install -e .
 
 # başlat
-python -m myagent --tui          # TUI modu
-python -m myagent                # REPL modu
+python -m myagent --tui     # TUI modu
+python -m myagent           # REPL modu
 ```
 
 ### Seçenek B — Docker (önerilir)
 
-Docker ile `~/.claude`, `~/.gemini`, `~/.myagent` klasörleri otomatik mount edilir — hiçbir şeyi elle yapılandırmak zorunda değilsin.
+`~/.claude`, `~/.gemini`, `~/.myagent` otomatik mount edilir. Hiçbir şeyi elle yapılandırmak gerekmez.
 
 ```bash
-cd myAgent/myagent
+cd myAgent
 
-docker compose build             # image oluştur
-docker compose run --rm myagent  # başlat
+docker compose build              # image oluştur
+docker compose run --rm myagent   # başlat
 ```
 
-Kısayol script:
-
 ```bash
-./run.sh                         # interaktif REPL
-./run.sh "port scanner yaz"      # tek seferlik görev
-./run.sh --build                 # rebuild + başlat
-./run.sh --shell                 # container bash'ine gir
+./run.sh                          # interaktif REPL
+./run.sh "port scanner yaz"       # tek seferlik görev
+./run.sh --build                  # rebuild + başlat
+./run.sh --shell                  # container bash'ine gir
 ```
 
 ### İlk Çalıştırma
 
-İlk çalıştırmada kurulum sihirbazı başlar. Hangi auth modunu ve hangi modelleri kullanacağını sorar. Sonradan `myagent --setup` ile veya TUI içinden `/auth` ve `/model` ile değiştirilebilir.
+İlk açılışta kurulum sihirbazı çalışır — hangi auth modunu ve hangi modelleri kullanacağını sorar. Sonradan TUI içinden `/auth` ve `/model` ile değiştirilebilir.
 
 ---
 
 ## TUI Modu
 
-```bash
-python -m myagent --tui
 ```
-
-```
-                      ___                    __
-     ____ ___  __  __/   | ____ ____  ____  / /_
-    / __ `__ \/ / / / /| |/ __ `/ _ \/ __ \/ __/
-   / / / / / / /_/ / ___ / /_/ /  __/ / / / /_
-  /_/ /_/ /_/\__, /_/  |_\__, /\___/_/ /_/\__/
-            /____/      /____/
-
-  v1.0.0  ·  Claude planlar  ·  Gemini yürütür
-
-  claude-sonnet-4-6  /  gemini-2.5-flash
-
-  ↑↓ geçmiş · Tab otomatik tamamla · Ctrl+Y kopyala · Ctrl+L temizle · F1 yardım
-
- ❯  Ne yapmamı istersin?
+  ┌─────────────────────────────────────────────────────────┐
+  │  myAgent                               12:34:56  Cmt    │
+  ├─────────────────────────────────────────────────────────┤
+  │                                                         │
+  │                          █████████                      │
+  │                         ███░░░░░███                     │
+  │  ████  ████  ████  ████ ░███    ░███  ████  ████  ████  │
+  │  ░░██  ░░██  ░░██  ░░██ ░███████████ ░░██  ░░██  ░░██   │
+  │   ░░    ░░    ░░    ░░  ░███░░░░░███  ░░    ░░    ░░    │
+  │                         ░███    ░███                     │
+  │  v1.0.0 · Claude planlar · Gemini yürütür               │
+  │  claude-sonnet-4-6  /  gemini-2.5-flash                 │
+  │                                                         │
+  │  ↑↓ geçmiş · Tab tamamla · Ctrl+Y kopyala · F1 yardım  │
+  │                                                         │
+  ├─────────────────────────────────────────────────────────┤
+  │ ❯  Ne yapmamı istersin?                                 │
+  └─────────────────────────────────────────────────────────┘
 ```
 
 ### Klavye Kısayolları
@@ -155,81 +219,83 @@ python -m myagent --tui
 | `Ctrl+L` | Ekranı temizle |
 | `F1` | Yardım |
 | `Ctrl+C` | İlk basış uyarı verir, ikinci basış çıkış |
-| `Esc` | Auth/Model ekranlarını kapat |
+| `Esc` | Açık ekranı kapat |
 
 ### Slash Komutları
 
-`/` yazmaya başlayınca altta otomatik tamamlama listesi açılır. `↑` `↓` ile seç, `Tab` veya `Enter` ile tamamla.
+`/` yazmaya başlayınca altta otomatik tamamlama açılır — `↑` `↓` ile seç, `Enter` ile uygula.
 
 | Komut | Açıklama |
 |---|---|
 | `/help` | Tüm komutları ve kısayolları göster |
-| `/auth` | Kimlik doğrulama ekranı — API key veya OAuth ayarla |
-| `/model` | Model seçim ekranı — Claude ve Gemini modellerini değiştir |
+| `/auth` | Kimlik doğrulama ekranı |
+| `/model` | Model seçim ekranı |
 | `/config` | Mevcut yapılandırmayı göster |
 | `/status` | Oturum istatistikleri |
 | `/about` | Versiyon ve model bilgileri |
-| `/think` | Verbose (ayrıntılı çıktı) modunu aç/kapat |
+| `/think` | Verbose modunu aç / kapat |
 | `/theme dark\|light` | Temayı değiştir |
 | `/sessions` | Kayıtlı oturumları listele |
-| `/load <n>` | Oturum yükle — numara veya ID ile |
-| `/rename <ad>` | Mevcut oturumu yeniden adlandır |
+| `/load <n>` | Oturum yükle |
+| `/rename <ad>` | Oturumu yeniden adlandır |
 | `/new` | Yeni oturum başlat |
-| `/export` | Oturumu `~/myagent_export_*.md` dosyasına aktar |
-| `/compact` | Konuşma geçmişini Claude ile özetleyip sıkıştır |
-| `/editor` | `$EDITOR` açılır, çok satırlı giriş yap |
+| `/export` | Oturumu Markdown dosyasına aktar |
+| `/compact` | Konuşma geçmişini özetleyip sıkıştır |
+| `/editor` | `$EDITOR` aç — çok satırlı giriş |
 | `/clear` | Ekranı temizle |
-| `/exit` | Uygulamadan çık |
+| `/exit` | Çıkış |
+
+---
 
 ### /auth Ekranı
 
 ```
-PLANLAYAN  —  Claude  ( ↑ ↓ ile seç )
-  Aboneliğinle kullan (Claude Code) ya da API key gir
-
-  ○ API Anahtarı       ~3 s/plan  · pay-as-you-go
-  ● Claude Code CLI    ~5 s/plan  · abonelik (Pro/Max)
-
-  ✓ Claude Code kurulu ve giriş yapılmış
-
-──────────────────────────────────────────────
-
-ÇALIŞAN  —  Worker  ( ↑ ↓ ile seç · Tab ile bu bölüme geç )
-  Görevleri kimin yürüteceğini seç
-
-  ● Gemini API         ~2 s/adım  · hızlı, GEMINI_API_KEY gerekli
-  ○ Claude Code        ~5 s/adım  · aynı aboneliği kullanır
-  ○ Gemini CLI         ~40 s/adım · yavaş, Node.js CLI
-
-  [  Kaydet ve Devam Et  ]
+╔══════════════════════════════════════════════════════════════╗
+║  Kimlik Doğrulama & Bağlantı Ayarları                        ║
+║  ↑ ↓ seçenek değiştir  ·  Tab sonraki bölüm                  ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  PLANLAYAN — Claude                                          ║
+║    ○ API Anahtarı       ~3 s/plan  · pay-as-you-go           ║
+║    ● Claude Code CLI    ~5 s/plan  · abonelik (Pro/Max)      ║
+║                                                              ║
+║    ✓ Claude Code kurulu ve giriş yapılmış                    ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  ÇALIŞAN — Worker                                            ║
+║    ● Gemini API         ~2 s/adım  · hızlı                   ║
+║    ○ Claude Code        ~5 s/adım  · aynı abonelik           ║
+║    ○ Gemini CLI         ~40 s/adım · Node.js CLI             ║
+║                                                              ║
+║                  [  Kaydet ve Devam Et  ]                    ║
+╚══════════════════════════════════════════════════════════════╝
 ```
-
-- **Claude Code CLI seçiliyse** ve giriş yapılmamışsa `claude login` butonu çıkar, terminal suspend olup tarayıcıya yönlendirir
-- **API Key seçiliyse** şifreli giriş alanı açılır, kaydedilen key `~/.myagent/.env`'e yazılır
 
 ### /model Ekranı
 
-API key varsa canlı model listesi çekilir, yoksa curated liste gösterilir.
-
 ```
-PLANLAYAN  —  Claude  ( ↑ ↓ ile seç )
-
-  ● claude-opus-4-6  ★  (mevcut)  —  Most capable, complex planning
-  ○ claude-sonnet-4-6              —  Balanced speed and quality
-  ○ claude-haiku-4-5-...           —  Fast and lightweight
-
-──────────────────────────────────────────────
-
-ÇALIŞAN  —  Gemini  ( ↑ ↓ ile seç · Tab ile bu bölüme geç )
-
-  ● gemini-2.5-flash  ★  (mevcut)  —  Fast with built-in reasoning
-  ○ gemini-2.5-pro                  —  Most capable, complex tasks
-  ○ gemini-2.0-flash                —  Stable fallback
-
-  [  Kaydet ve Devam Et  ]
+╔══════════════════════════════════════════════════════════════╗
+║  Model Seçimi                                                ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  PLANLAYAN — Claude                                          ║
+║    ● claude-opus-4-7    ★  (mevcut)  — Most capable          ║
+║    ○ claude-sonnet-4-6              — Balanced speed         ║
+║    ○ claude-haiku-4-5               — Fast and lightweight   ║
+║                                                              ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  ÇALIŞAN — Gemini                                            ║
+║    ● gemini-2.5-flash   ★  (mevcut)  — Fast + reasoning      ║
+║    ○ gemini-2.5-pro                  — Most capable          ║
+║    ○ gemini-2.0-flash                — Stable fallback       ║
+║                                                              ║
+║                  [  Kaydet ve Devam Et  ]                    ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
-`★` önerilen modeli gösterir. `(mevcut)` aktif seçimi işaretler.
+`★` önerilen modeli gösterir. API key varsa canlı model listesi çekilir.
 
 ---
 
@@ -238,8 +304,6 @@ PLANLAYAN  —  Claude  ( ↑ ↓ ile seç )
 ```bash
 python -m myagent
 ```
-
-Her türlü girdi kabul edilir. Claude, soruyu yanıtlayacak mı yoksa pipeline'ı başlatacak mı kendisi karar verir.
 
 ```
 myagent> basit bir şifre üreteci yaz
@@ -250,52 +314,37 @@ myagent> düzelt
 myagent> test ekle
 ```
 
-### REPL Komutları
+Claude her girdiyi otomatik değerlendirir: **soru mu → cevap**, **görev mi → pipeline**.
 
 | Komut | Açıklama |
 |---|---|
-| `<herhangi bir şey>` | Claude yönlendirir: soru mu, görev mi? |
-| `run <görev>` | Chat'i atlayıp doğrudan pipeline'a gönder |
-| `devam` / `devam et` | Son projeye kaldığın yerden devam et |
+| `devam` | Son projeye kaldığın yerden devam et |
 | `düzelt` / `fix` | Son projede hataları düzelt |
 | `test ekle` | Son projeye testler ekle |
-| `geçmiş` / `history` | Tüm geçmiş görevleri göster |
-| `son` / `last` | Son görevin detayları |
+| `geçmiş` | Tüm geçmiş görevleri göster |
 | `dosyalar` / `ls` | Workspace'deki dosyaları listele |
-| `temizle` | Workspace'i temizle |
-| `setup` | Auth ve model ayarlarını yeniden yapılandır |
-| `models` | Mevcut modelleri listele |
-| `config` | Yapılandırmayı göster |
+| `run <görev>` | Chat'i atlayıp doğrudan pipeline'a gönder |
 | `help` | Yardım |
 | `exit` | Çıkış |
 
 ---
 
-## Tek Seferlik (One-shot) Mod
+## One-shot Mod
 
 ```bash
 # Temel kullanım
 python -m myagent "REST API yaz, endpoint'leri test et"
 
-# Model seçimi
-python -m myagent "veri analizi yap" --claude-model sonnet --gemini-model 2.5-pro
-
-# Sadece planı gör, çalıştırma
-python -m myagent "web scraper yaz" --dry-run
-
-# Ayrıntılı çıktı
-python -m myagent "şifreleme kütüphanesi yaz" --verbose
-
-# Görev öncesi netleştirme soruları
-python -m myagent "büyük proje başlat" --clarify
-
-# Farklı çalışma dizini
-python -m myagent "dosya dönüştürücü yaz" --work-dir ~/projeler/converter
+# Seçenekler
+python -m myagent "veri analizi yap"  --claude-model opus  --gemini-model 2.5-pro
+python -m myagent "web scraper yaz"   --dry-run            # planı göster, çalıştırma
+python -m myagent "büyük proje"       --clarify            # önce sorular sor
+python -m myagent "şifreleme kütüphanesi" --verbose        # ham model çıktısı
 ```
 
 ---
 
-## Tüm CLI Seçenekleri
+## CLI Referansı
 
 ```
 python -m myagent [GÖREV] [SEÇENEKLER]
@@ -306,115 +355,43 @@ python -m myagent [GÖREV] [SEÇENEKLER]
 | `--tui` | Textual TUI modunda başlat |
 | `--claude-model MODEL` | Claude modeli — alias veya tam ID |
 | `--gemini-model MODEL` | Gemini modeli — alias veya tam ID |
-| `--claude-mode api\|cli` | Claude auth modunu geçersiz kıl |
-| `--gemini-mode api\|cli` | Gemini auth modunu geçersiz kıl |
 | `--work-dir PATH` | Dosya yazma dizini |
 | `--max-steps N` | Maksimum plan adımı (varsayılan: 10) |
 | `--dry-run` | Planı göster, yürütme |
-| `--sequential` | Adımları sırayla yürüt |
 | `--no-review` | Review döngüsünü atla |
-| `--no-complete` | Completion verification'ı atla |
-| `--max-review-rounds N` | Maksimum review turu (varsayılan: 2) |
 | `--clarify` | Başlamadan önce netleştirme soruları sor |
-| `--auto-deps` | Eksik pip paketlerini otomatik kur |
-| `--lang tr\|en` | Çıktı dilini zorla |
 | `--verbose` / `-v` | Ham model çıktısını göster |
-| `--list-models` | Mevcut modelleri listele ve çık |
-| `--config` | Yapılandırmayı göster ve çık |
 | `--setup` | Kurulum sihirbazını çalıştır |
+| `--list-models` | Mevcut modelleri listele |
 | `--version` | Versiyon bilgisi |
 
-### Model Alias'ları
+**Model alias'ları:**
 
-**Claude:**
-
-| Alias | Model ID |
+| Alias | Model |
 |---|---|
-| `opus` | `claude-opus-4-6` |
+| `opus` | `claude-opus-4-7` |
 | `sonnet` | `claude-sonnet-4-6` |
 | `haiku` | `claude-haiku-4-5-20251001` |
-
-**Gemini:**
-
-| Alias | Model ID |
-|---|---|
 | `2.5-flash` | `gemini-2.5-flash` |
 | `2.5-pro` | `gemini-2.5-pro` |
 | `flash` | `gemini-2.0-flash` |
 
 ---
 
-## Pipeline — Detaylı Akış
-
-### 1. Chat Katmanı
-
-Her girdi önce Chat modülüne gelir. Claude kısa bir değerlendirme yapar:
-
-- **Soru / açıklama** → Markdown yanıt döner, konuşma geçmişi korunur
-- **Görev** → İngilizce task tanımına çevrilir, pipeline başlatılır
-
-Konuşma geçmişi session boyunca tutulur (son 10 tur). "bunu düzelt", "buna test ekle" gibi referanslar doğal çalışır.
-
-### 2. Planner
-
-Claude görevi 3–10 atomik adıma böler. Workspace'deki mevcut dosyaları, AST sembol haritasını ve görev geçmişini de görür — var olan kodu yeniden yazmaz.
-
-```
-STEP 1: Create calculator.py with add(), subtract(), multiply(), divide()
-STEP 2: Write test_calculator.py with pytest assertions for all functions
-STEP 3: Run pytest to verify all tests pass
-```
-
-### 3. Worker
-
-Tüm adımlar tek bir toplu çağrıda Gemini'ye gönderilir. Her adım `===END===` ayracıyla ayrılmış `FILE:` veya `BASH:` bloğu döner.
-
-```
-FILE: calculator.py
-def add(a, b):
-    return a + b
-...
-===END===
-FILE: test_calculator.py
-import pytest
-from calculator import add
-...
-===END===
-BASH: python -m pytest test_calculator.py -v
-===END===
-```
-
-### 4. Review Döngüsü
-
-Dosyalar yazıldıktan sonra Claude kodu inceler:
-
-1. `ruff` lint kontrolü (`--fix` otomatik uygulanır)
-2. `pytest` varsa testleri çalıştırır
-3. Hata varsa → Gemini'ye düzeltme adımları gönderir
-4. Başarıya kadar tekrar — maksimum 2 tur
-
-### 5. Completion Verification
-
-Claude oluşturulan dosyaları okur ve asıl görevle karşılaştırır:
-
-- `COMPLETE` → bitti
-- `INCOMPLETE: STEP 1: ...` → Gemini'ye eksik adımlar gönderilir, tekrar doğrulanır
-
-### 6. Kalıcı Hafıza
-
-Her görev `~/.myagent/history.jsonl`'e kaydedilir. Bir sonraki görevde Claude bu geçmişi görür:
-
-```
-Past tasks:
-1. [2026-04-15] "fibonacci web app" → fibonacci.py, app.py, index.html
-2. [2026-04-16] "calculator with tests" → calculator.py, test_calculator.py
-```
-
----
-
 ## Auth Yapılandırması
 
-### Desteklenen Modlar
+```
+~/.myagent/config.json
+```
+
+```json
+{
+  "claude_mode":  "cli",
+  "claude_model": "claude-sonnet-4-6",
+  "gemini_mode":  "api",
+  "gemini_model": "gemini-2.5-flash"
+}
+```
 
 | Sağlayıcı | Mod | Gereksinim |
 |---|---|---|
@@ -422,65 +399,14 @@ Past tasks:
 | Claude | `cli` | `claude` CLI + `claude login` |
 | Gemini | `api` | `GEMINI_API_KEY` |
 | Gemini | `cli` | `gemini` CLI + `gemini login` |
-| Worker | `claude` | Claude CLI (worker olarak da kullanır) |
-
-### Önerilen Yapılandırma (API key gerekmez)
-
-```json
-{
-  "claude_mode": "cli",
-  "claude_model": "claude-sonnet-4-6",
-  "gemini_mode": "cli",
-  "gemini_model": "gemini-2.5-flash"
-}
-```
-
-`~/.myagent/config.json` dosyasına kaydedilir veya TUI içinden `/auth` ile ayarlanır.
-
-### API Key ile Yapılandırma
 
 ```bash
-# ortam değişkenleri (geçici)
-export ANTHROPIC_API_KEY=sk-ant-...
-export GEMINI_API_KEY=AIza...
+# Claude Code yoksa kur
+curl -fsSL https://claude.ai/install.sh | sh && claude login
 
-# ya da TUI'den /auth → API Anahtarı seç → yapıştır → Kaydet
-# ~/.myagent/.env dosyasına kalıcı olarak yazılır
+# Gemini CLI yoksa kur
+npm install -g @google/gemini-cli && gemini login
 ```
-
-### Claude Code CLI (OAuth, abonelik)
-
-Claude Code kuruluysa ve `claude login` yapılmışsa, API key'e gerek yoktur. myAgent bu oturumu kullanır.
-
-```bash
-# Claude Code kurulu değilse
-curl -fsSL https://claude.ai/install.sh | sh
-claude login     # tarayıcı açılır, abonelik hesabınla giriş yap
-
-# myAgent'ta /auth → Claude Code CLI seç → Kaydet
-```
-
----
-
-## Güvenlik
-
-### Path Traversal Koruması
-
-Tüm dosya yazma işlemlerinde hedef yol `WORK_DIR` altında kontrol edilir:
-
-```python
-target = (WORK_DIR / filename).resolve()
-target.relative_to(WORK_DIR.resolve())  # ValueError → reddedilir
-```
-
-`../../etc/passwd` ve benzeri tüm girişimler sessizce reddedilir.
-
-### Komut Yürütme
-
-- `shell=False` — her komut `shlex.split()` ile liste olarak çalışır
-- `eval()` ve `exec()` hiçbir yerde kullanılmaz
-- Docker dışında izin listesi: `mkdir`, `touch`, `echo`, `cat`
-- Docker içinde (`MYAGENT_DOCKER=1`) container sandbox yeterli
 
 ---
 
@@ -489,42 +415,31 @@ target.relative_to(WORK_DIR.resolve())  # ValueError → reddedilir
 ```
 myagent/
 ├── myagent/
-│   ├── cli.py              — REPL, argparse, SessionState
-│   ├── tui.py              — Textual TUI, slash komutları, session yönetimi
-│   ├── auth_screen.py      — /auth ekranı (Textual Screen)
-│   ├── model_screen.py     — /model ekranı (Textual Screen)
-│   ├── ui.py               — Rich terminal UI (streaming, paneller, Live)
-│   ├── interrupt.py        — ESC / Ctrl+C yönetimi
-│   ├── models.py           — model kayıt defteri, alias çözümü, canlı keşif
-│   ├── setup_wizard.py     — ilk çalıştırma sihirbazı
+│   ├── cli.py              ← REPL, argparse, SessionState
+│   ├── tui.py              ← Textual TUI, slash komutları
+│   ├── auth_screen.py      ← /auth ekranı
+│   ├── model_screen.py     ← /model ekranı
+│   ├── ui.py               ← Rich terminal (streaming, Live)
+│   ├── interrupt.py        ← ESC / Ctrl+C yönetimi
+│   ├── models.py           ← model kayıt defteri, canlı keşif
+│   ├── setup_wizard.py     ← ilk çalıştırma sihirbazı
 │   │
 │   ├── agent/
-│   │   ├── chat.py         — soru ↔ görev routing, konuşma geçmişi
-│   │   ├── planner.py      — Claude → STEP listesi
-│   │   ├── worker.py       — Gemini → FILE/BASH toplu çıktısı
-│   │   ├── executor.py     — dosya yazımı + güvenli komut yürütme
-│   │   ├── reviewer.py     — ruff + pytest + Claude düzeltme döngüsü
-│   │   ├── completer.py    — Claude tamamlama doğrulayıcı
-│   │   ├── clarifier.py    — görev öncesi netleştirme soruları
-│   │   ├── deps.py         — eksik pip paket tespiti ve kurulumu
-│   │   └── pipeline.py     — tam döngü orkestrasyonu
+│   │   ├── pipeline.py     ← tam döngü orkestrasyonu
+│   │   ├── chat.py         ← soru ↔ görev yönlendirme
+│   │   ├── planner.py      ← Claude → STEP listesi
+│   │   ├── worker.py       ← Gemini → FILE/BASH çıktısı
+│   │   ├── executor.py     ← güvenli dosya yazımı + komut
+│   │   ├── reviewer.py     ← ruff + pytest + düzeltme döngüsü
+│   │   ├── completer.py    ← tamamlama doğrulayıcı
+│   │   └── deps.py         ← eksik pip paket tespiti
 │   │
 │   ├── memory/
-│   │   └── history.py      — kalıcı görev geçmişi (jsonl + dosya indeksi)
-│   │
-│   ├── i18n/
-│   │   ├── translator.py   — TR↔EN sözlük (API çağrısı yok)
-│   │   └── locale.py       — sistem dili tespiti
-│   │
-│   ├── prompts/
-│   │   ├── planner.txt
-│   │   ├── worker.txt
-│   │   ├── worker_batch.txt
-│   │   └── clarifier.txt
+│   │   └── history.py      ← kalıcı görev geçmişi (jsonl)
 │   │
 │   └── config/
-│       ├── settings.py     — sabitler, validate()
-│       └── auth.py         — mod/model tespiti, override, config I/O
+│       ├── settings.py     ← sabitler, validate()
+│       └── auth.py         ← mod/model tespiti, config I/O
 │
 ├── docker-compose.yml
 ├── Dockerfile
@@ -538,17 +453,30 @@ myagent/
 | Dosya | İçerik |
 |---|---|
 | `~/.myagent/config.json` | Mod ve model tercihleri |
-| `~/.myagent/.env` | API key'ler (TUI'den kaydedilince oluşur) |
+| `~/.myagent/.env` | API key'ler (TUI'den /auth ile kaydedilir) |
 | `~/.myagent/sessions/*.json` | TUI oturum geçmişi |
 | `~/.myagent/history.jsonl` | Görev geçmişi |
 
-### Ortam Değişkenleri
-
-| Değişken | Açıklama |
+| Ortam Değişkeni | Açıklama |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API anahtarı |
 | `GEMINI_API_KEY` | Gemini API anahtarı |
 | `MYAGENT_WORK_DIR` | Dosya yazma dizini (varsayılan: `./workspace`) |
 | `MYAGENT_DOCKER` | `1` ise komut whitelist devre dışı |
-| `MYAGENT_CLAUDE_MODE` | `api` veya `cli` — config'i geçersiz kılar |
-| `MYAGENT_GEMINI_MODE` | `api` veya `cli` — config'i geçersiz kılar |
+
+---
+
+## Güvenlik
+
+- **Path traversal koruması** — tüm dosya yazma işlemleri `WORK_DIR` içinde kontrol edilir; `../../etc/passwd` gibi denemeler reddedilir
+- **`shell=False`** — her komut `shlex.split()` ile liste olarak çalışır, injection mümkün değil
+- **`eval()` / `exec()` yok** — hiçbir yerde kullanılmaz
+- **Docker sandbox** — `MYAGENT_DOCKER=1` ile tam izolasyon
+
+<div align="center">
+
+---
+
+*Claude düşünür. Gemini çalışır.*
+
+</div>

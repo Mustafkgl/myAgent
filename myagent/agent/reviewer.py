@@ -261,33 +261,16 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
     mode = get_claude_mode()
     system = (PROMPTS_DIR / "reviewer.txt").read_text(encoding="utf-8")
 
-    from myagent.agent.tokens import tracker
-
     model = get_claude_model()
     if mode == CLI:
-        import time
+        from myagent.agent.claude_runner import is_error, run_claude_cli, warn_skipped
         full_prompt = f"{system}\n\n{prompt}"
         cmd = ["claude", "-p", full_prompt, "--model", model]
-        try:
-            if stream_callback:
-                proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
-                )
-                from myagent import interrupt
-                deadline = time.time() + 120
-                output = interrupt.readline_interruptible(proc, stream_callback, deadline)
-                if proc.returncode not in (0, None):
-                    return "APPROVED"
-                tracker.add_claude(len(full_prompt) // 4, len(output) // 4, model, estimated=True)
-                return output.strip()
-            else:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                if result.returncode != 0:
-                    return "APPROVED"
-                tracker.add_claude(len(full_prompt) // 4, len(result.stdout) // 4, model, estimated=True)
-                return result.stdout.strip()
-        except Exception:
+        output = run_claude_cli(cmd, full_prompt, model, timeout=120, stream_callback=stream_callback)
+        if is_error(output):
+            warn_skipped("review")
             return "APPROVED"
+        return output
     else:
         if not ANTHROPIC_API_KEY:
             return "APPROVED"

@@ -13,7 +13,6 @@ from __future__ import annotations
 import ast
 import os
 import re
-import subprocess
 from pathlib import Path
 
 from myagent.config.settings import ANTHROPIC_API_KEY, PROMPTS_DIR, WORK_DIR
@@ -207,10 +206,11 @@ def _build_interface(task: str, steps: list[str], mode: str) -> str:
 
         model = get_claude_model()
         if mode == _CLI:
-            import subprocess
+            from myagent.agent.claude_runner import is_error, run_claude_cli
             cmd = ["claude", "-p", prompt, "--model", model]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            raw = result.stdout.strip() if result.returncode == 0 else ""
+            raw = run_claude_cli(cmd, prompt, model, timeout=30)
+            if is_error(raw):
+                raw = ""
         else:
             if not ANTHROPIC_API_KEY:
                 return ""
@@ -280,42 +280,17 @@ def _plan_via_api(task: str, stream_callback=None) -> str:
 # ---------------------------------------------------------------------------
 
 def _plan_via_cli(task: str, stream_callback=None) -> str:
+    from myagent.agent.claude_runner import _FALLBACK_SENTINEL, is_error, run_claude_cli
     from myagent.config.auth import get_claude_model
+
     model = get_claude_model()
     full_prompt = f"{_system_prompt()}\n\nTask: {task}"
     cmd = ["claude", "-p", full_prompt, "--model", model]
 
-    from myagent.agent.tokens import tracker
-
-    if stream_callback:
-        import time
-        try:
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
-            )
-        except FileNotFoundError:
-            raise RuntimeError("`claude` komutu bulunamadı. Claude Code kurulu mu?")
-        from myagent import interrupt
-        deadline = time.time() + 120
-        output = interrupt.readline_interruptible(proc, stream_callback, deadline)
-        stderr = proc.stderr.read() if proc.stderr else ""
-        if proc.returncode not in (0, None):
-            raise RuntimeError(f"Claude CLI hata (kod {proc.returncode}):\n{stderr.strip()}")
-        tracker.add_claude(len(full_task) // 4, len(output) // 4, model, estimated=True)
-        return output
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    except FileNotFoundError:
-        raise RuntimeError("`claude` komutu bulunamadı. Claude Code kurulu mu?")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Claude CLI zaman aşımına uğradı (120 s).")
-
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
-        raise RuntimeError(f"Claude CLI hata (kod {result.returncode}):\n{detail}")
-    tracker.add_claude(len(full_task) // 4, len(result.stdout) // 4, model, estimated=True)
-    return result.stdout
+    output = run_claude_cli(cmd, full_prompt, model, timeout=120, stream_callback=stream_callback)
+    if is_error(output):
+        raise RuntimeError("Claude CLI planlama başarısız. Token limiti veya bağlantı hatası.")
+    return output
 
 
 # ---------------------------------------------------------------------------

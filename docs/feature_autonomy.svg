@@ -1,0 +1,30 @@
+<svg width="400" height="200" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="200" rx="10" fill="#0f172a" />
+  <text x="200" y="30" font-family="monospace" font-size="14" font-weight="bold" fill="#4ade80" text-anchor="middle">🧠 OTONOM DÖNGÜ (AŞAMA 6)</text>
+  
+  <!-- Steps -->
+  <rect x="20" y="60" width="100" height="40" rx="5" fill="#1e293b" stroke="#4285F4" />
+  <text x="70" y="85" font-family="monospace" font-size="10" fill="#f8fafc" text-anchor="middle">1. GEMINI</text>
+  <text x="70" y="115" font-family="monospace" font-size="9" fill="#94a3b8" text-anchor="middle">Engel Saptandı</text>
+
+  <path d="M 120 80 L 160 80" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)" />
+  
+  <rect x="160" y="60" width="110" height="40" rx="5" fill="#334155" stroke="#facc15" />
+  <text x="215" y="85" font-family="monospace" font-size="10" fill="#facc15" text-anchor="middle">OBSERVATION</text>
+  
+  <path d="M 270 80 L 310 80" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)" />
+  
+  <rect x="310" y="60" width="70" height="40" rx="5" fill="#1e293b" stroke="#c084fc" />
+  <text x="345" y="85" font-family="monospace" font-size="10" fill="#c084fc" text-anchor="middle">CLAUDE</text>
+  <text x="345" y="115" font-family="monospace" font-size="9" fill="#94a3b8" text-anchor="middle">Re-Plan</text>
+
+  <!-- Marker -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+    </marker>
+  </defs>
+  
+  <path d="M 345 125 Q 345 170 200 170 Q 70 170 70 125" fill="none" stroke="#4ade80" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)" />
+  <text x="200" y="160" font-family="monospace" font-size="9" fill="#4ade80" text-anchor="middle">Otonom Devam</text>
+</svg>

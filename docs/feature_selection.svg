@@ -1,0 +1,17 @@
+<svg width="400" height="200" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="200" rx="10" fill="#0f172a" />
+  <text x="200" y="30" font-family="monospace" font-size="14" font-weight="bold" fill="#f472b6" text-anchor="middle">📋 KELİME SEÇİM MODU (CTRL+K)</text>
+  
+  <rect x="50" y="60" width="300" height="110" rx="6" fill="#1e293b" />
+  
+  <!-- Text lines with selection -->
+  <rect x="65" y="85" width="180" height="12" fill="#4285F4" opacity="0.4" />
+  <text x="65" y="95" font-family="monospace" font-size="9" fill="#f8fafc">import socket, sys, time</text>
+  
+  <text x="65" y="115" font-family="monospace" font-size="9" fill="#f8fafc">def scan_port(host, port):</text>
+  
+  <rect x="130" y="125" width="60" height="12" fill="#4285F4" opacity="0.4" />
+  <text x="65" y="135" font-family="monospace" font-size="9" fill="#f8fafc">    try: s.connect((host, port))</text>
+  
+  <text x="200" y="165" font-family="monospace" font-size="10" fill="#f472b6" font-weight="bold" text-anchor="middle">Mouse ile seç &amp; kopyala</text>
+</svg>

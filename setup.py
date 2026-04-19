@@ -14,6 +14,7 @@ setup(
         "anthropic>=0.25.0",
         "google-generativeai>=0.5.0",
         "rich>=13.0.0",
+        "prompt_toolkit>=3.0",
     ],
     entry_points={
         "console_scripts": [

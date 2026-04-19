@@ -333,12 +333,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Show raw model output and per-step details",
     )
     beh_grp.add_argument(
-        "--tui", action="store_true", default=True,
-        help="Start with Textual TUI (default: on)",
+        "--no-tui", action="store_true",
+        help="Use classic REPL instead of interactive session",
     )
     beh_grp.add_argument(
-        "--no-tui", action="store_false", dest="tui",
-        help="Use classic REPL instead of TUI",
+        "--legacy-tui", action="store_true", dest="legacy_tui",
+        help="Use old Textual TUI (alternate screen, no text selection)",
     )
 
     # ── Utility flags ────────────────────────────────────────────────────────
@@ -1119,11 +1119,16 @@ def main() -> None:
         )
         return
 
-    # ── 7. Interactive TUI or REPL ────────────────────────────────────────────
-    if args.tui and sys.stdout.isatty():
+    # ── 7. Interactive REPL (prompt_toolkit) or legacy Textual TUI ───────────
+    use_legacy_tui = getattr(args, "legacy_tui", False)
+    if use_legacy_tui and sys.stdout.isatty():
         from myagent.tui import start_tui
         session = SessionState()
         start_tui(session, verbose=args.verbose)
+    elif sys.stdout.isatty():
+        from myagent.repl import start_repl
+        session = SessionState()
+        start_repl(session, verbose=args.verbose)
     else:
         _repl(
             verbose=args.verbose,

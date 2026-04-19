@@ -627,15 +627,8 @@ def _dispatch(state: ReplState, raw: str) -> bool:
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def _term_width() -> int:
-    try:
-        return os.get_terminal_size().columns
-    except OSError:
-        return 80
-
-
 def _rule() -> None:
-    _console.print("─" * _term_width(), style="dim")
+    _console.rule(style="dim")
 
 
 
@@ -744,6 +737,13 @@ def _build_key_bindings(state: "ReplState") -> KeyBindings:
         finally:
             Path(tmp).unlink(missing_ok=True)
 
+    @kb.add("enter")
+    def _(event):
+        buf = event.app.current_buffer
+        if buf.text.strip():
+            buf.validate_and_handle()
+        # empty → do nothing; cursor stays on same line
+
     return kb
 
 
@@ -755,6 +755,11 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
 
     kb = _build_key_bindings(state)
 
+    def _rprompt():
+        from myagent.config.auth import get_claude_model
+        model = get_claude_model().split("-")[-1]  # e.g. "sonnet-4-5" → "4-5"
+        return HTML(f'<ansibrightblack>◆ {model}  ? kısayollar  /help komutlar</ansibrightblack>')
+
     prompt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_path)),
         completer=_SlashCompleter(),
@@ -763,6 +768,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         key_bindings=kb,
         enable_history_search=True,
         multiline=False,
+        rprompt=_rprompt,
     )
 
     _print_banner(state)

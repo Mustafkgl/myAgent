@@ -36,8 +36,8 @@ Bu sayede Claude Code ile aynı projeyi ayağa kaldırırken **token maliyetinde
 - **Human-in-the-Loop:** Claude planı bitirdiğinde onayınızı bekler. Siz "Yürü" diyene kadar hiçbir dosya değişmez.
 
 <div align="center">
-<img src="docs/screenshot_startup.png" alt="myAgent Modern TUI" width="800"/>
-<br/><em>Yeni nesil üç panelli responsive arayüz</em>
+<img src="docs/tui_mockup.svg" alt="myAgent Modern TUI" width="800"/>
+<br/><em>Yeni nesil üç panelli responsive arayüz (Mockup)</em>
 </div>
 
 ---

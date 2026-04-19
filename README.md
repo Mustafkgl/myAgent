@@ -204,9 +204,13 @@ myagent> test ekle
 | `/about` | Versiyon ve model bilgileri |
 | `/think` | Verbose modunu aç / kapat |
 | `/theme dark\|light` | Temayı değiştir |
-| `/sessions` | Kayıtlı oturumları listele |
-| `/load <n>` | Oturum yükle |
-| `/rename <ad>` | Oturumu yeniden adlandır |
+| `/sessions` | Kayıtlı oturumları konu özetiyle listele |
+| `/load <n\|id>` | Oturum yükle |
+| `/rename [n\|id] <ad>` | Oturumu yeniden adlandır (herhangi birini) |
+| `/delete <n\|id>` | Oturumu çöp kutusuna taşı |
+| `/trash` | Çöp kutusunu listele |
+| `/restore <n\|id>` | Çöp kutusundan geri al |
+| `/purge [n\|id\|all]` | Çöp kutusundan kalıcı sil |
 | `/new` | Yeni oturum başlat |
 | `/export` | Oturumu Markdown dosyasına aktar |
 | `/compact` | Konuşma geçmişini özetleyip sıkıştır |

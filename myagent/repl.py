@@ -772,14 +772,9 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
 
     kb = _build_key_bindings(state)
 
-    def _rprompt():
-        from myagent.config.auth import get_claude_model
-        model = get_claude_model().split("-")[-1]
-        return HTML(f'<ansibrightblack>◆ {model}  ? kısayollar  /help komutlar</ansibrightblack>')
-
-    def _prompt_message():
+    def _bottom_toolbar():
         from prompt_toolkit.application import get_app
-        from prompt_toolkit.formatted_text import FormattedText
+        from myagent.config.auth import get_claude_model
         try:
             width = get_app().output.get_size().columns
         except Exception:
@@ -787,12 +782,13 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
                 width = os.get_terminal_size().columns
             except OSError:
                 width = 80
-        return FormattedText([
-            ("fg:ansibrightblack", "─" * width),
-            ("", "\n"),
-            ("fg:ansipurple bold", "❯"),
-            ("", " "),
-        ])
+        model = get_claude_model()
+        info = f" ◆ {model}  ? kısayollar  /help komutlar "
+        dashes = max(0, width - len(info))
+        left = dashes // 2
+        right = dashes - left
+        rule = "─" * left + info + "─" * right
+        return HTML(f"<ansibrightblack>{rule}</ansibrightblack>")
 
     prompt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_path)),
@@ -801,7 +797,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         key_bindings=kb,
         enable_history_search=True,
         multiline=False,
-        rprompt=_rprompt,
+        bottom_toolbar=_bottom_toolbar,
     )
 
     _print_banner(state)
@@ -810,7 +806,9 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
 
     while True:
         try:
-            raw = prompt_session.prompt(_prompt_message).strip()
+            raw = prompt_session.prompt(
+                HTML("<ansipurple><b>❯</b></ansipurple> ")
+            ).strip()
             quit_confirm = False
         except KeyboardInterrupt:
             if quit_confirm:

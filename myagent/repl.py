@@ -805,6 +805,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
     quit_confirm = False
 
     while True:
+        _console.rule(style="dim")
         try:
             raw = prompt_session.prompt(
                 HTML("<ansipurple><b>❯</b></ansipurple> ")

@@ -744,6 +744,11 @@ def _build_key_bindings(state: "ReplState") -> KeyBindings:
             buf.validate_and_handle()
         # empty → do nothing; cursor stays on same line
 
+    @kb.add("/")
+    def _(event):
+        event.app.current_buffer.insert_text("/")
+        event.app.current_buffer.start_completion(select_first=False)
+
     return kb
 
 

@@ -763,7 +763,6 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
 
     def _bottom_toolbar():
         from prompt_toolkit.application import get_app
-        from myagent.config.auth import get_claude_model
         try:
             width = get_app().output.get_size().columns
         except Exception:
@@ -771,13 +770,11 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
                 width = os.get_terminal_size().columns
             except OSError:
                 width = 80
-        model = get_claude_model()
-        info = f" ◆ {model}  ? kısayollar  /help komutlar "
-        dashes = max(0, width - len(info))
-        left = dashes // 2
-        right = dashes - left
-        rule = "─" * left + info + "─" * right
-        return HTML(f"<ansibrightblack>{rule}</ansibrightblack>")
+        rule = "─" * width
+        return HTML(
+            f"<ansibrightblack>{rule}</ansibrightblack>\n"
+            f"<ansibrightblack>  ? kısayollar · /help komutlar · Ctrl+O editör · Ctrl+Y kopyala</ansibrightblack>"
+        )
 
     prompt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_path)),
@@ -794,6 +791,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
     quit_confirm = False
 
     while True:
+        _console.rule(style="dim")
         try:
             raw = prompt_session.prompt(
                 HTML("<ansipurple><b>❯</b></ansipurple> ")

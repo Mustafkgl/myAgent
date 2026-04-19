@@ -97,10 +97,25 @@ class _SlashCompleter(Completer):
 _SESSIONS_DIR = Path.home() / ".myagent" / "sessions"
 
 
+def _extract_topic(messages: list[dict]) -> str:
+    """First user message, stripped to one line, max 120 chars."""
+    for m in messages:
+        if m.get("role") == "user":
+            text = m.get("text", "").replace("\n", " ").strip()
+            return text[:120]
+    return ""
+
+
 def _sessions_save(sid: str, name: str, messages: list[dict]) -> None:
     import json
     _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    data = {"id": sid, "name": name, "updated_at": datetime.now().isoformat(), "messages": messages}
+    data = {
+        "id": sid,
+        "name": name,
+        "updated_at": datetime.now().isoformat(),
+        "topic": _extract_topic(messages),
+        "messages": messages,
+    }
     (_SESSIONS_DIR / f"{sid}.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -415,18 +430,22 @@ def _cmd_sessions() -> None:
     if not sessions:
         _console.print(Text("  Kayıtlı oturum yok.\n", style=C_DIM))
         return
-    t = Text(f"\n  Oturumlar ({len(sessions)}):\n", style=f"bold {C_CLAUDE}")
+    t = Text(f"\n  Oturumlar ({len(sessions)}):\n\n", style=f"bold {C_CLAUDE}")
     for i, s in enumerate(sessions[:20], 1):
-        sid  = s.get("id", "")[:8]
-        name = s.get("name", "isimsiz")[:40]
-        ts   = s.get("updated_at", "")[:16].replace("T", " ")
+        sid   = s.get("id", "")[:8]
+        ts    = s.get("updated_at", "")[:16].replace("T", " ")
         n_msg = len(s.get("messages", []))
+        topic = s.get("topic") or _extract_topic(s.get("messages", []))
+
         t.append(f"  [{i:2}]  ", style=C_DIM)
-        t.append(f"{name:<42}", style="white")
-        t.append(f"  {ts}  ", style=C_DIM)
+        t.append(f"{ts}  ", style="white")
         t.append(f"{n_msg:3} mesaj  ", style=C_DIM)
         t.append(f"id:{sid}\n", style="dim")
-    t.append("\n  /load <numara veya id>  ile yükle\n\n", style=C_DIM)
+        if topic:
+            preview = topic[:88] + ("…" if len(topic) > 88 else "")
+            t.append(f"        {preview}\n", style="italic")
+        t.append("\n", style="")
+    t.append("  /load <numara veya id>  ile yükle\n\n", style=C_DIM)
     _console.print(t)
 
 

@@ -189,6 +189,9 @@ class ReplState:
 
 def _print_banner(state: ReplState | None = None) -> None:
     from myagent.config.auth import get_claude_model, get_gemini_model
+    # Disable line wrap: banner lines stay 1 row each on resize → cursor tracking intact
+    sys.stdout.write("\033[?7l")
+    sys.stdout.flush()
     _console.print(Text(_BANNER, style="bold #c084fc"))
     _console.print(Text.assemble(
         ("  v1.0.0  ·  ", "dim"),
@@ -203,6 +206,8 @@ def _print_banner(state: ReplState | None = None) -> None:
         "     ↑↓ geçmiş · Tab tamamla · Ctrl+O editör · Ctrl+Y kopyala · ? kısayollar\n",
         style="dim",
     ))
+    sys.stdout.write("\033[?7h")
+    sys.stdout.flush()
     _console.rule(style="dim")
 
 

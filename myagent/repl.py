@@ -186,7 +186,7 @@ def _print_banner(state: ReplState | None = None) -> None:
         ("  ✦ ", "#4285F4"), (get_gemini_model(), "#E8EAED"), ("\n", ""),
     ))
     _console.print(Text(
-        "     ↑↓ geçmiş · Tab otomatik tamamla · Ctrl+Y kopyala · ? for shortcuts\n",
+        "     ↑↓ geçmiş · Tab tamamla · Ctrl+O editör · Ctrl+Y kopyala · ? kısayollar\n",
         style="dim",
     ))
 
@@ -638,16 +638,6 @@ def _rule() -> None:
     _console.print("─" * _term_width(), style="dim")
 
 
-def _bottom_toolbar(state: "ReplState"):
-    from myagent.config.auth import get_claude_model, get_gemini_model
-    left  = " <b>?</b> for shortcuts"
-    right = f"◐ {get_claude_model()} · ✦ {get_gemini_model()} "
-    # strip HTML tags for width calculation
-    left_plain  = "? for shortcuts"
-    right_plain = f"◐ {get_claude_model()} · ✦ {get_gemini_model()} "
-    width = _term_width()
-    pad = max(1, width - len(left_plain) - len(right_plain) - 1)
-    return HTML(f"{left}{' ' * pad}<b>{right}</b>")
 
 
 def _copy_to_clipboard(text: str) -> bool:
@@ -770,18 +760,22 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         completer=_SlashCompleter(),
         complete_while_typing=True,
         complete_in_thread=True,
-        bottom_toolbar=lambda: _bottom_toolbar(state),
         key_bindings=kb,
         enable_history_search=True,
         multiline=False,
     )
 
     _print_banner(state)
+    _rule()  # tek seferlik başlangıç rule'u
 
     quit_confirm = False
+    had_output = False  # rule sadece gerçek output sonrası basılsın
 
     while True:
-        _rule()
+        if had_output:
+            _rule()
+            had_output = False
+
         try:
             raw = prompt_session.prompt(
                 HTML("<ansipurple><b>❯</b></ansipurple> ")
@@ -794,6 +788,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
                 break
             quit_confirm = True
             _console.print(Text("  Çıkmak için tekrar Ctrl+C yapın.\n", style="dim yellow"))
+            had_output = True
             continue
         except EOFError:
             state.autosave()
@@ -801,7 +796,9 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
             break
 
         if not raw:
-            continue
+            continue  # boş enter → sessizce devam, rule yok
+
+        had_output = True
 
         # ? alone → shortcuts
         if raw == "?":

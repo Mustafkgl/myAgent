@@ -42,9 +42,22 @@ if TYPE_CHECKING:
 _SESSIONS_DIR = Path.home() / ".myagent" / "sessions"
 
 
+def _extract_topic(messages: list[dict]) -> str:
+    for m in messages:
+        if m.get("role") == "user":
+            return m.get("text", "").replace("\n", " ").strip()[:120]
+    return ""
+
+
 def _sessions_save(sid: str, name: str, messages: list[dict]) -> None:
     _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    data = {"id": sid, "name": name, "updated_at": datetime.now().isoformat(), "messages": messages}
+    data = {
+        "id": sid,
+        "name": name,
+        "updated_at": datetime.now().isoformat(),
+        "topic": _extract_topic(messages),
+        "messages": messages,
+    }
     (_SESSIONS_DIR / f"{sid}.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -704,15 +717,18 @@ class MyAgentApp(App):
         t = Text(f"\n  Oturumlar ({len(sessions)}):\n", style=f"bold {C_CLAUDE}")
         for i, s in enumerate(sessions[:20], 1):
             sid   = s.get("id", "")[:8]
-            name  = s.get("name", "isimsiz")[:40]
             ts    = s.get("updated_at", "")[:16].replace("T", " ")
             n_msg = len(s.get("messages", []))
+            topic = s.get("topic") or _extract_topic(s.get("messages", []))
             t.append(f"  [{i:2}]  ", style=C_DIM)
-            t.append(f"{name:<42}", style="white")
-            t.append(f"  {ts}  ", style=C_DIM)
+            t.append(f"{ts}  ", style="white")
             t.append(f"{n_msg:3} mesaj  ", style=C_DIM)
             t.append(f"id:{sid}\n", style="dim")
-        t.append("\n  /load <numara veya id>  ile yükle\n", style=C_DIM)
+            if topic:
+                preview = topic[:88] + ("…" if len(topic) > 88 else "")
+                t.append(f"        {preview}\n", style="italic")
+            t.append("\n", style="")
+        t.append("  /load <numara veya id>  ile yükle\n", style=C_DIM)
         self.log_message(t)
 
     async def _load_session(self, arg: str) -> None:

@@ -93,8 +93,12 @@ Tüm adımlar tek çağrıda"]
 | **Pipeline** | Çift model | Claude planlar + inceler, Gemini yürütür |
 | | Review döngüsü | ruff + pytest + otomatik düzeltme |
 | | Completion verify | Görev tamamlanmadan kapanmaz |
-| **Hafıza** | Session kalıcılığı | Oturumlar kaydedilir, isimlendirilir |
+| | State persistence | Pipeline durumu kaydedilir, yarıda kalırsa devam edilir |
+| **Hafıza** | Session kalıcılığı | Oturumlar kaydedilir, konu özeti ile listelenir |
 | | Görev geçmişi | "bunu düzelt", "test ekle" doğal çalışır |
+| **Maliyet** | Token takibi | Claude + Gemini token kullanımı ve maliyet hesabı |
+| | Tasarruf analizi | "Tümü Claude olsaydı ne kadar öderdin?" karşılaştırması |
+| | Token limit koruması | Rate limit tespit edilince otomatik bekler ve devam eder |
 | **Teknik** | Canlı reflow | Terminal resize olunca anında yeniden düzenlenir |
 | | Cross-platform | Windows · macOS · Linux |
 | | Auth esnekliği | API key veya OAuth (Claude Code / Gemini CLI) |
@@ -212,6 +216,48 @@ myagent> test ekle
 
 ---
 
+---
+
+## Pipeline Durumu ve Devam Ettirme
+
+Pipeline bir görev sırasında kesilirse (Ctrl+C, network hatası, token limiti) durum otomatik kaydedilir. Sonraki oturumda kaldığı yerden devam edilir.
+
+```bash
+# Kayıtlı pipeline oturumlarını listele
+python -m myagent --sessions
+
+# En son yarım kalan oturumu devam ettir
+python -m myagent --resume
+
+# Belirli bir oturumu devam ettir
+python -m myagent --resume abc12345
+```
+
+---
+
+## Token Takibi ve Maliyet Tasarrufu
+
+`/status` komutu anlık token kullanımını ve gerçek maliyet tasarrufunu gösterir:
+
+```
+  Token Kullanımı
+  ◆ Claude:   12,450 giriş  +  3,200 çıkış  =  $0.0481
+  ✦ Gemini:   85,000 giriş  +  12,000 çıkış  =  $0.0000
+
+  Maliyet Tasarrufu
+  Tümü Claude olsaydı:   $0.3820
+  Gerçek maliyet:        $0.0481
+  Tasarruf:              $0.3339  (%87.4)
+
+  Verimlilik
+  Toplam görev:   8
+  İlk seferde:    6  (%75)
+```
+
+> Token limiti (rate limit) tespit edilince myAgent otomatik bekler ve görev kaldığı yerden devam eder.
+
+---
+
 ### /auth Ekranı
 
 <div align="center">
@@ -234,6 +280,8 @@ python -m myagent [GÖREV] [SEÇENEKLER]
 
 | Seçenek | Açıklama |
 |---|---|
+| `--resume [SESSION_ID]` | Yarıda kalan pipeline oturumunu devam ettir |
+| `--sessions` | Kayıtlı pipeline oturumlarını listele |
 | `--no-tui` | TUI yerine klasik REPL modunda başlat |
 | `--claude-model MODEL` | Claude modeli — alias veya tam ID |
 | `--gemini-model MODEL` | Gemini modeli — alias veya tam ID |
@@ -300,13 +348,17 @@ myagent/
 │   ├── setup_wizard.py     ← ilk çalıştırma sihirbazı
 │   │
 │   ├── agent/
-│   │   ├── pipeline.py     ← tam döngü orkestrasyonu
+│   │   ├── pipeline.py     ← tam döngü orkestrasyonu, state checkpoint
+│   │   ├── state.py        ← PipelineState, session kaydetme/yükleme
 │   │   ├── chat.py         ← soru ↔ görev yönlendirme
 │   │   ├── planner.py      ← Claude → STEP listesi
+│   │   ├── claude_runner.py← token limit tespiti, otomatik retry
 │   │   ├── worker.py       ← Gemini → FILE/BASH çıktısı
 │   │   ├── executor.py     ← güvenli dosya yazımı + komut
 │   │   ├── reviewer.py     ← ruff + pytest + düzeltme döngüsü
 │   │   ├── completer.py    ← tamamlama doğrulayıcı
+│   │   ├── tokens.py       ← TokenTracker, maliyet hesabı
+│   │   ├── doctor.py       ← sistem sağlık kontrolü
 │   │   └── deps.py         ← eksik pip paket tespiti
 │   │
 │   ├── memory/
@@ -336,6 +388,7 @@ myagent/
 | `~/.myagent/config.json` | Mod ve model tercihleri |
 | `~/.myagent/.env` | API key'ler |
 | `~/.myagent/sessions/*.json` | Oturum geçmişi |
+| `~/.myagent/pipeline_sessions/` | Pipeline durum dosyaları |
 | `~/.myagent/history.jsonl` | Görev geçmişi |
 
 <div align="center">

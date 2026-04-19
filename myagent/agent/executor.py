@@ -134,8 +134,16 @@ def _write_file(filename: str, content: str) -> ExecutionResult:
             message=f"Security: path traversal denied for '{filename}'.",
         )
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content, encoding="utf-8")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    except Exception as e:
+        return ExecutionResult(
+            ok=False,
+            kind="error",
+            message=f"File I/O error for '{filename}': {str(e)}",
+            details={"error": str(e), "filename": filename}
+        )
 
     return ExecutionResult(
         ok=True,

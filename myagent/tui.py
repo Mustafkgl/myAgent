@@ -846,6 +846,9 @@ class MyAgentApp(App):
         self._sid   = data["id"]
         self._sname = data.get("name", "yüklendi")
         self._msgs  = data.get("messages", [])
+        if not self.session.chat:
+            self.session.chat = Chat()
+        self.session.chat.load_history(self._msgs)
 
         for msg in self._msgs:
             if msg["role"] == "user":

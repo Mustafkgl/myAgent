@@ -97,6 +97,15 @@ class Chat:
         self._add("assistant", f"[Task completed: {task}]\n{summary[:400]}")
         self._trim()
 
+    def load_history(self, messages: list[dict]) -> None:
+        """Restore chat history from a persisted session."""
+        self.history = [
+            {"role": m["role"], "content": m.get("text") or m.get("content", "")}
+            for m in messages
+            if m.get("role") in ("user", "assistant")
+            and (m.get("text") or m.get("content"))
+        ]
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

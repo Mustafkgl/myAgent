@@ -22,14 +22,15 @@ RULES
 4. DO NOT ask about things you can reasonably assume (Python version, basic error handling, OS).
 5. DO ask when the answer changes architecture: sync vs async, CLI vs API, file format, storage type.
 
-GOOD questions:
-  "Async mi yoksa senkron tarama mı olsun?"
-  "Sonuçlar JSON olarak mı, düz metin olarak mı çıksın?"
-  "Sadece TCP mi, UDP de taransın mı?"
+Example questions:
+  "Should the scan be async or synchronous?"
+  "Should results be output as JSON or plain text?"
+  "Should it scan TCP only, or include UDP?"
+
   "Should it support concurrent scanning?"
   "Should results be saved to a file?"
 
 BAD questions (do NOT ask these):
-  "Hangi programlama dili?" (Python — context implies it)
-  "Hata yönetimi eklensin mi?" (always yes)
-  "Yorum satırları olsun mu?" (always yes)
+  "Which programming language?" (Python — context implies it)
+  "Should I handle errors?" (Always yes)
+  "Should I add comments?" (Always yes)

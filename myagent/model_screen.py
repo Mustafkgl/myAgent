@@ -32,14 +32,14 @@ def _radio_select(radio_set: RadioSet, index: int) -> None:
 
 def _model_label(m: ModelInfo, current_id: str) -> str:
     rec = "  ★" if m.is_recommended else ""
-    cur = "  (mevcut)" if m.id == current_id else ""
+    cur = "  (current)" if m.id == current_id else ""
     return f"{m.id}{rec}{cur}  —  {m.description}"
 
 
 class ModelScreen(Screen):
     BINDINGS = [
-        ("escape", "app.pop_screen", "İptal"),
-        ("ctrl+s",  "save",          "Kaydet"),
+        ("escape", "app.pop_screen", "Cancel"),
+        ("ctrl+s",  "save",          "Save"),
     ]
 
     CSS = """
@@ -77,31 +77,31 @@ class ModelScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         with VerticalScroll(id="model-scroll"):
-            yield Static("Model Seçimi", classes="model-title")
+            yield Static("Model Selection", classes="model-title")
             yield Static(
-                "  ↑ ↓ model değiştir  ·  Tab sonraki bölüm  ·  ★ önerilen model\n",
+                "  ↑ ↓ change model  ·  Tab next section  ·  ★ recommended model\n",
                 classes="nav-hint",
             )
 
             # ── Claude ────────────────────────────────────────────────────────
             yield Static(
-                f"PLANLAYAN  —  Claude  [dim]( ↑ ↓ ile seç )[/dim]",
+                f"PLANNER  —  Claude  [dim]( ↑ ↓ to select )[/dim]",
                 classes="model-title",
             )
-            yield Static("  Modeller yükleniyor…", id="claude-loading", classes="loading")
+            yield Static("  Models loading…", id="claude-loading", classes="loading")
             yield RadioSet(id="claude-radio")
 
             yield Static("─" * 60, classes="divider")
 
             # ── Gemini ────────────────────────────────────────────────────────
             yield Static(
-                f"ÇALIŞAN  —  Gemini  [dim]( ↑ ↓ ile seç · Tab ile bu bölüme geç )[/dim]",
+                f"WORKER  —  Gemini  [dim]( ↑ ↓ to select · Tab to this section )[/dim]",
                 classes="model-title",
             )
-            yield Static("  Modeller yükleniyor…", id="gemini-loading", classes="loading")
+            yield Static("  Models loading…", id="gemini-loading", classes="loading")
             yield RadioSet(id="gemini-radio")
 
-            yield Button("  Kaydet ve Devam Et  ", id="save-btn", classes="save-btn", variant="success")
+            yield Button("  Save and Continue  ", id="save-btn", classes="save-btn", variant="success")
 
         yield Footer()
 

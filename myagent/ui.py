@@ -110,7 +110,7 @@ class AgentUI:
             f"[{C_DIM}]{claude_model}  /  {gemini_model}[/]",
             style=C_DIM,
         ))
-        self.console.print(f"\n[{C_TASK}]Görev:[/] {escape(task)}\n")
+        self.console.print(f"\n[{C_TASK}]Task:[/] {escape(task)}\n")
 
     # ── Spinner context manager (non-model ops: ruff, deps, pytest…) ────────
 
@@ -129,14 +129,7 @@ class AgentUI:
 
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
-        """Live streaming display with resize-responsive status bar.
-
-        Yields a write(text) callable. Streamed lines are printed to the
-        console (scrollback); a live status bar at the bottom shows the
-        operation label, elapsed time, and estimated token count. The bar
-        updates at 10 fps and redraws on terminal resize automatically.
-        ESC or Ctrl+C raises Interrupted.
-        """
+        """Live streaming display with resize-responsive status bar."""
         from myagent import interrupt
 
         start = time.time()
@@ -164,8 +157,6 @@ class AgentUI:
                 self.console.print(f"    [grey42]{escape(tail)}[/]")
             pending.clear()
 
-        # interrupt.context() is managed at the REPL level (cli.py) so ESC is
-        # detected across the entire command, not just during streaming calls.
         try:
             with Live(status, console=self.console, refresh_per_second=10, transient=True):
                 try:
@@ -178,7 +169,7 @@ class AgentUI:
         except interrupt.Interrupted:
             secs = int(time.time() - start)
             e = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
-            self.console.print(f"  [{C_ERR}]⊗ İptal edildi[/]  [{C_DIM}]({e})[/]")
+            self.console.print(f"  [{C_ERR}]⊗ Cancelled[/]  [{C_DIM}]({e})[/]")
             raise
 
         secs = int(time.time() - start)
@@ -195,14 +186,14 @@ class AgentUI:
             t.add_row(f"[{C_CLAUDE}]{i}[/]", escape(s))
         self.console.print(Panel(
             t,
-            title=f"[{C_CLAUDE}]Plan — {len(steps)} adım[/]",
+            title=f"[{C_CLAUDE}]Plan — {len(steps)} steps[/]",
             border_style=C_CLAUDE,
         ))
 
     def ask_approval(self) -> bool:
         """Ask for user confirmation before executing the plan."""
         from rich.prompt import Confirm
-        return Confirm.ask(f"\n  [{C_CLAUDE}]Plana devam edilsin mi?[/]", default=True)
+        return Confirm.ask(f"\n  [{C_CLAUDE}]Proceed with plan?[/]", default=True)
 
     # ── Execution ────────────────────────────────────────────────────────────
 
@@ -220,7 +211,7 @@ class AgentUI:
             t.add_row(f"[{C_DIM}]{i}[/]", f"[{icon_style}]{icon}[/]", escape(detail))
         self.console.print(Panel(
             t,
-            title=f"[{C_GEMINI}]Yürütme[/]",
+            title=f"[{C_GEMINI}]Execution[/]",
             border_style=C_GEMINI,
             padding=(0, 1),
         ))
@@ -229,7 +220,7 @@ class AgentUI:
 
     def missing_files_retry(self, steps: list[str]) -> None:
         self.console.print(
-            f"  [{C_WARN}]⚠ Eksik dosya(lar) — yeniden deneniyor: "
+            f"  [{C_WARN}]⚠ Missing file(s) — retrying: "
             + ", ".join(escape(s[:60]) for s in steps)
             + "[/]"
         )
@@ -238,14 +229,14 @@ class AgentUI:
 
     def dep_found(self, packages: list[str]) -> None:
         self.console.print(
-            f"  [{C_WARN}]⬡ Eksik paket:[/] {', '.join(packages)}"
+            f"  [{C_WARN}]⬡ Missing package:[/] {', '.join(packages)}"
         )
 
     def dep_installed(self, pip_name: str) -> None:
-        self.console.print(f"  [{C_OK}]✓ {escape(pip_name)} kuruldu[/]")
+        self.console.print(f"  [{C_OK}]✓ {escape(pip_name)} installed[/]")
 
     def dep_skipped(self, pip_name: str) -> None:
-        self.console.print(f"  [{C_DIM}]– {escape(pip_name)} atlandı[/]")
+        self.console.print(f"  [{C_DIM}]– {escape(pip_name)} skipped[/]")
 
     def dep_error(self, pip_name: str, msg: str) -> None:
         self.console.print(f"  [{C_ERR}]✗ {escape(pip_name)}: {escape(msg[:120])}[/]")
@@ -253,50 +244,50 @@ class AgentUI:
     # ── Review ───────────────────────────────────────────────────────────────
 
     def review_ruff_clean(self) -> None:
-        self.console.print(f"  [{C_RUFF}]✓ ruff — temiz[/]")
+        self.console.print(f"  [{C_RUFF}]✓ ruff — clean[/]")
 
     def review_ruff_issues(self, n: int) -> None:
-        self.console.print(f"  [{C_WARN}]⚠ ruff — {n} sorun[/]")
+        self.console.print(f"  [{C_WARN}]⚠ ruff — {n} issues[/]")
 
     def review_ruff_fixed(self) -> None:
-        self.console.print(f"  [{C_RUFF}]✓ ruff --fix uygulandı[/]")
+        self.console.print(f"  [{C_RUFF}]✓ ruff --fix applied[/]")
 
     def review_test_pass(self, fname: str) -> None:
-        self.console.print(f"  [{C_OK}]✓ test geçti: {escape(fname)}[/]")
+        self.console.print(f"  [{C_OK}]✓ test passed: {escape(fname)}[/]")
 
     def review_test_fail(self, fname: str) -> None:
-        self.console.print(f"  [{C_ERR}]✗ test başarısız: {escape(fname)}[/]")
+        self.console.print(f"  [{C_ERR}]✗ test failed: {escape(fname)}[/]")
 
     def review_approved(self, round_num: int) -> None:
         self.console.print(
-            f"  [{C_OK}]✓ Review onaylandı[/] [{C_DIM}](tur {round_num})[/]"
+            f"  [{C_OK}]✓ Review approved[/] [{C_DIM}](round {round_num})[/]"
         )
 
     def review_fix_steps(self, steps: list[str]) -> None:
-        self.console.print(f"  [{C_WARN}]↻ Düzeltme gerekiyor ({len(steps)} adım):[/]")
+        self.console.print(f"  [{C_WARN}]↻ Fix required ({len(steps)} steps):[/]")
         for i, s in enumerate(steps, 1):
             self.console.print(f"    [{C_DIM}]{i}.[/] {escape(s[:100])}")
 
     def review_stuck(self, n_errors: int) -> None:
         self.console.print(
-            f"  [{C_ERR}]⚠ Kısır döngü ({n_errors} hata, azalmıyor) — durduruluyor[/]"
+            f"  [{C_ERR}]⚠ Infinite loop ({n_errors} errors, not decreasing) — stopping[/]"
         )
 
     def review_max_rounds(self, n: int) -> None:
-        self.console.print(f"  [{C_WARN}]⚠ Max review turu doldu ({n})[/]")
+        self.console.print(f"  [{C_WARN}]⚠ Max review rounds reached ({n})[/]")
 
     # ── Completion verification ──────────────────────────────────────────────
 
     def completion_verified(self) -> None:
-        self.console.print(f"  [{C_OK}]✓ Tamamlama doğrulandı[/]")
+        self.console.print(f"  [{C_OK}]✓ Completion verified[/]")
 
     def completion_missing(self, steps: list[str]) -> None:
-        self.console.print(f"  [{C_WARN}]⚠ Eksiklikler tespit edildi ({len(steps)} adım):[/]")
+        self.console.print(f"  [{C_WARN}]⚠ Incomplete steps detected ({len(steps)} steps):[/]")
         for i, s in enumerate(steps, 1):
             self.console.print(f"    [{C_DIM}]{i}.[/] {escape(s[:120])}")
 
     def completion_max_rounds(self, n: int) -> None:
-        self.console.print(f"  [{C_WARN}]⚠ Max tamamlama turu doldu ({n})[/]")
+        self.console.print(f"  [{C_WARN}]⚠ Max completion rounds reached ({n})[/]")
 
     # ── Session context ──────────────────────────────────────────────────────
 
@@ -309,7 +300,7 @@ class AgentUI:
         from rich.text import Text as RText
         self.console.print(Panel(
             RText(text),
-            title=f"[{C_CLAUDE}]Görev Geçmişi[/]",
+            title=f"[{C_CLAUDE}]Task History[/]",
             border_style=C_CLAUDE,
             padding=(0, 1),
         ))
@@ -317,11 +308,6 @@ class AgentUI:
     # ── Chat answer display ──────────────────────────────────────────────────
 
     def chat_answer(self, text: str) -> None:
-        """Render answer in a Live panel that re-renders on terminal resize.
-
-        The panel stays "live" (responsive to SIGWINCH) until stop_live() is
-        called — which the REPL does just before the next input() prompt.
-        """
         import signal
         from rich.markdown import Markdown
         from rich.padding import Padding
@@ -382,13 +368,13 @@ class AgentUI:
         cols.add_column()
         cols.add_column()
         cols.add_row(
-            f"{status_icon} {'Tamamlandı' if success else 'Hatalarla tamamlandı'}",
-            f"{rev_icon} {'Review onaylı' if review_approved else 'Review kısmen'}",
+            f"{status_icon} {'Completed' if success else 'Completed with errors'}",
+            f"{rev_icon} {'Review approved' if review_approved else 'Partial review'}",
         )
         if created_files:
             cols.add_row(
-                f"[{C_DIM}]Dosyalar:[/] {', '.join(escape(f) for f in created_files)}",
-                f"[{C_DIM}]Süre:[/] {self._elapsed()}",
+                f"[{C_DIM}]Files:[/] {', '.join(escape(f) for f in created_files)}",
+                f"[{C_DIM}]Duration:[/] {self._elapsed()}",
             )
 
         self.console.print(Panel(
@@ -427,68 +413,68 @@ class NullUI:
         print(flush=True)
 
     def plan_done(self, steps):
-        print(f"  Plan ({len(steps)} adım):")
+        print(f"  Plan ({len(steps)} steps):")
         for i, s in enumerate(steps, 1):
             print(f"    {i}. {s}")
 
     def exec_results(self, steps, results):
         for i, r in enumerate(results, 1):
-            print(f"  adım {i}: {r.message}")
+            print(f"  step {i}: {r.message}")
 
     def missing_files_retry(self, steps):
-        print(f"  Eksik dosya retry: {len(steps)} adım")
+        print(f"  Missing file retry: {len(steps)} steps")
 
     def dep_found(self, packages):
-        print(f"  [deps] eksik: {', '.join(packages)}")
+        print(f"  [deps] missing: {', '.join(packages)}")
 
     def dep_installed(self, pip_name):
-        print(f"  [deps] {pip_name} kuruldu")
+        print(f"  [deps] {pip_name} installed")
 
     def dep_skipped(self, pip_name):
-        print(f"  [deps] {pip_name} atlandı")
+        print(f"  [deps] {pip_name} skipped")
 
     def dep_error(self, pip_name, msg):
-        print(f"  [deps] hata: {pip_name}: {msg}")
+        print(f"  [deps] error: {pip_name}: {msg}")
 
     def review_ruff_clean(self):
-        print("  [ruff] temiz")
+        print("  [ruff] clean")
 
     def review_ruff_issues(self, n):
-        print(f"  [ruff] {n} sorun")
+        print(f"  [ruff] {n} issues")
 
     def review_ruff_fixed(self):
-        print("  [ruff --fix] uygulandı")
+        print("  [ruff --fix] applied")
 
     def review_test_pass(self, fname):
-        print(f"  [test] geçti: {fname}")
+        print(f"  [test] passed: {fname}")
 
     def review_test_fail(self, fname):
-        print(f"  [test] başarısız: {fname}")
+        print(f"  [test] failed: {fname}")
 
     def review_approved(self, round_num):
-        print(f"  onaylandı (tur {round_num})")
+        print(f"  approved (round {round_num})")
 
     def review_fix_steps(self, steps):
-        print(f"  düzeltme ({len(steps)} adım):")
+        print(f"  fix ({len(steps)} steps):")
         for i, s in enumerate(steps, 1):
             print(f"    {i}. {s}")
 
     def review_stuck(self, n):
-        print(f"  kısır döngü ({n} hata) — durduruluyor")
+        print(f"  infinite loop ({n} errors) — stopping")
 
     def review_max_rounds(self, n):
-        print(f"  max tur ({n})")
+        print(f"  max rounds ({n})")
 
     def completion_verified(self):
-        print("  tamamlama doğrulandı")
+        print("  completion verified")
 
     def completion_missing(self, steps):
-        print(f"  eksik ({len(steps)} adım):")
+        print(f"  incomplete ({len(steps)} steps):")
         for i, s in enumerate(steps, 1):
             print(f"    {i}. {s}")
 
     def completion_max_rounds(self, n):
-        print(f"  max tamamlama turu ({n})")
+        print(f"  max completion rounds ({n})")
 
     def session_context_notice(self, notice):
         print(f"  ℹ {notice}")
@@ -504,8 +490,8 @@ class NullUI:
             print(f"\n--- {label} ---\n{text}\n")
 
     def summary(self, success, review_approved, n_review_rounds, created_files):
-        status = "Tamamlandı" if success else "Hatalarla tamamlandı"
-        print(f"\n{status}. Dosyalar: {', '.join(created_files)}\n")
+        status = "Completed" if success else "Completed with errors"
+        print(f"\n{status}. Files: {', '.join(created_files)}\n")
 
 
 # ---------------------------------------------------------------------------

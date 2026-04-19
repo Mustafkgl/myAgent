@@ -1,11 +1,11 @@
 <svg width="400" height="200" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
   <rect width="400" height="200" rx="10" fill="#0f172a" />
-  <text x="200" y="30" font-family="monospace" font-size="14" font-weight="bold" fill="#4ade80" text-anchor="middle">🧠 OTONOM DÖNGÜ (AŞAMA 6)</text>
+  <text x="200" y="30" font-family="monospace" font-size="14" font-weight="bold" fill="#4ade80" text-anchor="middle">🧠 AUTONOMOUS LOOP (STAGE 6)</text>
   
   <!-- Steps -->
   <rect x="20" y="60" width="100" height="40" rx="5" fill="#1e293b" stroke="#4285F4" />
   <text x="70" y="85" font-family="monospace" font-size="10" fill="#f8fafc" text-anchor="middle">1. GEMINI</text>
-  <text x="70" y="115" font-family="monospace" font-size="9" fill="#94a3b8" text-anchor="middle">Engel Saptandı</text>
+  <text x="70" y="115" font-family="monospace" font-size="9" fill="#94a3b8" text-anchor="middle">Obstacle Detected</text>
 
   <path d="M 120 80 L 160 80" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)" />
   
@@ -26,5 +26,5 @@
   </defs>
   
   <path d="M 345 125 Q 345 170 200 170 Q 70 170 70 125" fill="none" stroke="#4ade80" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)" />
-  <text x="200" y="160" font-family="monospace" font-size="9" fill="#4ade80" text-anchor="middle">Otonom Devam</text>
+  <text x="200" y="160" font-family="monospace" font-size="9" fill="#4ade80" text-anchor="middle">Autonomous Resume</text>
 </svg>

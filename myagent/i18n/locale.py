@@ -1,8 +1,8 @@
 import locale
 import os
 
-SUPPORTED_LANGUAGES = {"tr", "en"}
-DEFAULT_LANGUAGE = "tr"
+SUPPORTED_LANGUAGES = {"en", "tr"}
+DEFAULT_LANGUAGE = "en"
 
 
 def get_system_language() -> str:

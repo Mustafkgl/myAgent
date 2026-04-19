@@ -125,7 +125,7 @@ def run(
     # ── 1. Clarification ────────────────────────────────────────────────────
     if clarify and not dry_run:
         from myagent.agent.clarifier import clarify as ask_clarify
-        with ui.spinner("Netleştirme soruları hazırlanıyor…", color="medium_purple1"):
+        with ui.spinner("Preparing clarification questions…", color="medium_purple1"):
             pass  # clarify is interactive — spinner shows intent
         task = ask_clarify(task, verbose=verbose)
     result.clarified_task = task
@@ -137,7 +137,7 @@ def run(
         set_interface_contract(interface_contract)
         result.plan_steps = steps
         ui.plan_done(steps)
-        print(f"  [resume] Planlama atlandı — {len(steps)} adım yüklendi.", flush=True)
+        print(f"  [resume] Planning skipped — {len(steps)} steps loaded.", flush=True)
     else:
         _planner_buf: list[str] = []
 
@@ -145,7 +145,7 @@ def run(
             _planner_buf.append(chunk)
             write(chunk)  # forward to streaming UI
 
-        with ui.streaming("Claude planlıyor…", color="medium_purple1") as write:
+        with ui.streaming("Claude is planning…", color="medium_purple1") as write:
             steps, interface_contract = plan(
                 task, verbose=False,
                 stream_callback=_planner_write,
@@ -161,7 +161,7 @@ def run(
 
         if not steps:
             result.summary_en = "No steps were generated."
-            result.summary_tr = en_to_tr(result.summary_en)
+            result.summary_tr = "No steps were generated."
             result.success = False
             return result
 
@@ -177,20 +177,20 @@ def run(
         approved = ui.ask_approval()
         if not approved:
             result.summary_en = "Plan was rejected by the user."
-            result.summary_tr = "Plan kullanıcı tarafından reddedildi."
+            result.summary_tr = "Plan was rejected by the user."
             result.success = False
             return result
 
     if dry_run:
         result.summary_en = f"Dry run: {len(steps)} steps planned (not executed)."
-        result.summary_tr = en_to_tr(result.summary_en)
+        result.summary_tr = result.summary_en
         return result
 
     # ── 3. Execute ───────────────────────────────────────────────────────────
     if resume_state and phase_done(resume_state.phase, "executed"):
         result.created_files = list(resume_state.created_files)
-        lines_en = [f"[resume] {len(result.created_files)} dosya yüklendi."]
-        print(f"  [resume] Yürütme atlandı — {len(result.created_files)} dosya mevcut.", flush=True)
+        lines_en = [f"[resume] {len(result.created_files)} files loaded."]
+        print(f"  [resume] Execution skipped — {len(result.created_files)} files exist.", flush=True)
     else:
         lines_en = _execute(steps, task, batch, verbose, result, ui)
 
@@ -213,10 +213,7 @@ def run(
         _save_ps(ps)
 
     # ── 4. Review loop ────────────────────────────────────────────────────────
-    # Run review whenever files were created — BASH step failures (e.g. a pytest
-    # run that fails) are exactly what the reviewer is meant to catch and fix.
     if review and result.created_files:
-        # Determine which review rounds are already done when resuming
         resume_review_round = 0
         if resume_state and resume_state.phase.startswith("review_"):
             try:
@@ -235,8 +232,6 @@ def run(
             _save_ps(ps)
 
     # ── 6. Summary ────────────────────────────────────────────────────────────
-    # If review approved the output, promote overall success regardless of any
-    # intermediate BASH step failures (e.g. a pytest run that failed before the fix).
     if result.review_approved or result.completion_verified:
         result.success = True
     status = "All steps completed." if result.success else "Completed with errors."
@@ -249,7 +244,7 @@ def run(
     if result.completion_verified:
         status += " Completion verified."
     result.summary_en = status + "\n" + "\n".join(lines_en)
-    result.summary_tr = en_to_tr(result.summary_en)
+    result.summary_tr = result.summary_en
 
     ui.summary(
         success=result.success,
@@ -290,10 +285,6 @@ def run(
     return result
 
 
-# ---------------------------------------------------------------------------
-# State save helper (silently ignores errors — pipeline must not crash on save)
-# ---------------------------------------------------------------------------
-
 def _save_ps(ps: PipelineState) -> None:
     try:
         save_state(ps)
@@ -301,34 +292,17 @@ def _save_ps(ps: PipelineState) -> None:
         pass
 
 
-# ---------------------------------------------------------------------------
-# Raw output store (used by verbose mode to retrieve last model output)
-# ---------------------------------------------------------------------------
 _last_raw: dict[str, str] = {"planner": "", "worker": "", "reviewer": ""}
 
-
-# ---------------------------------------------------------------------------
-# Missing-step detector
-# ---------------------------------------------------------------------------
-
 _FILE_PATTERN = re.compile(r"\b([\w./\\-]+\.(?:py|js|ts|json|yaml|yml|toml|txt|md|sh|html|css))\b")
-
-# Steps that run commands rather than create files — skip these in missing-file detection
 _BASH_STEP_PREFIX = re.compile(r"^\s*(run|execute|test|verify|check|lint|install)\b", re.IGNORECASE)
 _BASH_CMD_IN_STEP = re.compile(r"\bpython\s+-[mc]\b|\bpytest\b|\bruff\b|\bpip\b|\buv\s+pip\b", re.IGNORECASE)
 
 
 def _find_missing_steps(steps: list[str], created_files: list[str]) -> list[str]:
-    """Return steps that mention a file that was never created.
-
-    Excludes steps that are clearly BASH execution steps (pytest, python -m, etc.)
-    rather than file-creation steps — those won't produce files and should never
-    trigger a retry.
-    """
     created_set = set(created_files)
     missing: list[str] = []
     for step in steps:
-        # Skip steps whose primary action is running a command, not creating a file
         if _BASH_STEP_PREFIX.match(step) or _BASH_CMD_IN_STEP.search(step):
             continue
         for fname in _FILE_PATTERN.findall(step):
@@ -337,10 +311,6 @@ def _find_missing_steps(steps: list[str], created_files: list[str]) -> list[str]
                 break
     return missing
 
-
-# ---------------------------------------------------------------------------
-# Execution helpers
-# ---------------------------------------------------------------------------
 
 def _execute(
     steps: list[str],
@@ -354,7 +324,7 @@ def _execute(
     seen_files: dict[str, bool] = {}
 
     if batch:
-        with ui.streaming(f"Gemini yürütüyor — {len(steps)} adım…", color="dodger_blue1") as write:
+        with ui.streaming(f"Gemini is executing — {len(steps)} steps…", color="dodger_blue1") as write:
             worker_out = execute_all_steps(steps, task, verbose=False, stream_callback=write)
 
         if verbose:
@@ -374,22 +344,19 @@ def _execute(
             ))
             lines_en.append(f"Step {i}: {exec_result.message}")
             
-            # ── Autonomous Loop: Handle Observation ─────────────────────────
             if exec_result.kind == "observation":
                 obs_text = exec_result.details.get("observation", "")
-                ui.raw("Gözlem", obs_text, color="yellow3")
+                ui.raw("Observation", obs_text, color="yellow3")
                 
-                with ui.streaming("Claude stratejiyi güncelliyor…", color="medium_purple1") as write:
-                    # Claude'a sadece gözlemi ve kalan adımları göndererek token tasarrufu yapıyoruz
+                with ui.streaming("Claude is updating strategy…", color="medium_purple1") as write:
                     remaining_steps = steps[i:]
                     new_steps, _ = plan(
-                        f"Gözlem: {obs_text}\nKalan Adımlar: {remaining_steps}\nLütfen stratejiyi uyarla.",
+                        f"Observation: {obs_text}\nRemaining Steps: {remaining_steps}\nPlease adapt the strategy.",
                         verbose=False, stream_callback=write
                     )
                 
                 if new_steps:
                     ui.plan_done(new_steps)
-                    # Kalan adımları yeni adımlarla değiştir ve devam et
                     return _execute(new_steps, task, batch, verbose, result, ui)
 
             if exec_result.kind == "file" and "filename" in exec_result.details:
@@ -403,7 +370,7 @@ def _execute(
         context_lines: list[str] = [f"Overall task: {task}"]
         all_results = []
         for i, step_desc in enumerate(steps, start=1):
-            with ui.streaming(f"Gemini — adım {i}/{len(steps)}: {step_desc[:55]}…", color="dodger_blue1") as write:
+            with ui.streaming(f"Gemini — step {i}/{len(steps)}: {step_desc[:55]}…", color="dodger_blue1") as write:
                 worker_out = execute_step(step_desc, "\n".join(context_lines), verbose=False, stream_callback=write)
             exec_result = parse_and_execute(worker_out)
             all_results.append(exec_result)
@@ -425,10 +392,6 @@ def _execute(
     return lines_en
 
 
-# ---------------------------------------------------------------------------
-# Review loop
-# ---------------------------------------------------------------------------
-
 def _review_loop(
     task: str,
     result: RunResult,
@@ -446,9 +409,9 @@ def _review_loop(
 
     for round_num in range(1, max_rounds + 1):
         if round_num <= skip_rounds:
-            print(f"  [resume] Review turu {round_num} atlandı.", flush=True)
+            print(f"  [resume] Review round {round_num} skipped.", flush=True)
             continue
-        with ui.streaming(f"Review — Claude analiz ediyor (tur {round_num}/{max_rounds})…", color="cyan2") as write:
+        with ui.streaming(f"Review — Claude is analyzing (round {round_num}/{max_rounds})…", color="cyan2") as write:
             rev = do_review(
                 task, result.created_files,
                 round_num=round_num, verbose=False, ui=ui,
@@ -456,7 +419,7 @@ def _review_loop(
             )
 
         if verbose and rev.feedback_raw:
-            ui.raw(f"Reviewer raw (tur {round_num})", rev.feedback_raw, color="cyan2")
+            ui.raw(f"Reviewer raw (round {round_num})", rev.feedback_raw, color="cyan2")
 
         rec = ReviewRecord(
             round_num=round_num, approved=rev.approved,
@@ -485,7 +448,6 @@ def _review_loop(
             break
         prev_error_hash = error_hash
 
-        # Save state before executing fixes (in case of crash during fix)
         if ps:
             ps.phase = f"review_{round_num}"
             ps.review_round = round_num
@@ -495,7 +457,7 @@ def _review_loop(
 
         ui.review_fix_steps(rev.fix_steps)
 
-        with ui.streaming("Gemini düzeltiyor…", color="dodger_blue1") as write:
+        with ui.streaming("Gemini is fixing…", color="dodger_blue1") as write:
             fix_worker_out = execute_all_steps(rev.fix_steps, task, verbose=False, stream_callback=write)
         fix_results = parse_batch_and_execute(fix_worker_out, expected=len(rev.fix_steps))
 
@@ -503,7 +465,7 @@ def _review_loop(
         for j, (fix_desc, fix_result) in enumerate(zip(rev.fix_steps, fix_results), 1):
             result.steps.append(StepRecord(
                 index=base + j,
-                description=f"[fix tur {round_num}] {fix_desc}",
+                description=f"[fix round {round_num}] {fix_desc}",
                 worker_output=fix_worker_out,
                 result=fix_result,
             ))
@@ -522,10 +484,6 @@ def _review_loop(
     return lines_en
 
 
-# ---------------------------------------------------------------------------
-# Completion verification loop
-# ---------------------------------------------------------------------------
-
 def _completion_loop(
     task: str,
     result: RunResult,
@@ -538,7 +496,7 @@ def _completion_loop(
 
     for round_num in range(1, max_rounds + 1):
         with ui.streaming(
-            f"Claude tamamlanma doğruluyor (tur {round_num}/{max_rounds})…",
+            f"Claude is verifying completion (round {round_num}/{max_rounds})…",
             color="medium_purple1",
         ) as write:
             cv = do_verify(task, result.created_files, stream_callback=write)
@@ -562,7 +520,7 @@ def _completion_loop(
 
         ui.completion_missing(cv.missing_steps)
 
-        with ui.streaming("Gemini eksiklikleri tamamlıyor…", color="dodger_blue1") as write:
+        with ui.streaming("Gemini is completing missing parts…", color="dodger_blue1") as write:
             extra_out = execute_all_steps(
                 cv.missing_steps, task, verbose=False, stream_callback=write,
             )
@@ -572,7 +530,7 @@ def _completion_loop(
         for j, (desc, er) in enumerate(zip(cv.missing_steps, extra_results), 1):
             result.steps.append(StepRecord(
                 index=base + j,
-                description=f"[completion tur {round_num}] {desc}",
+                description=f"[completion round {round_num}] {desc}",
                 worker_output=extra_out,
                 result=er,
             ))

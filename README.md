@@ -3,7 +3,7 @@
 
 <img src="banner.png" alt="myAgent" width="672"/>
 
-### Claude Düşünür — Gemini Çalışır — Siz Sadece Hedeflersiniz
+### Claude Thinks — Gemini Works — You Just Target
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Claude](https://img.shields.io/badge/Brain-Claude%203.5-c084fc?style=flat-square)
@@ -11,123 +11,123 @@
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-6D28D9?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
-**myAgent**, dünyanın en gelişmiş iki yapay zeka modelini (Claude ve Gemini) tek bir otonom döngüde birleştiren, yüksek performanslı bir AI Terminal asistanıdır.
+**myAgent** is a high-performance AI Terminal assistant that combines the world's most advanced AI models (Claude and Gemini) into a single autonomous loop.
 
 </div>
 
 ---
 
-## 💡 Felsefe: Bilinçli Asimetri
+## 💡 Philosophy: Conscious Asymmetry
 
-Piyasadaki AI ajanlarının çoğu "pahalı" modelleri her basit dosya okuma işlemi için kullanarak bütçenizi ve limitlerinizi hızla tüketir. **myAgent** farklıdır:
+Most AI agents on the market use "expensive" models for every simple file read operation, quickly consuming your budget and limits. **myAgent** is different:
 
-> **Stratejik Zekayı** (Planlama ve İnceleme) Claude'a verir, **Kas Gücünü** (Kod Yazma ve Terminal Yürütme) Gemini'ye bırakır.
+> It gives **Strategic Intelligence** (Planning and Reviewing) to Claude, and leaves the **Brute Force** (Code Writing and Terminal Execution) to Gemini.
 
-Bu asimetrik mimari sayesinde Claude Code ile aynı projeyi ayağa kaldırırken **token maliyetinden %90'a kadar tasarruf** edersiniz. Claude sadece planlar ve review yapar (az token), Gemini binlerce satır kodu ücretsiz/ucuz bağlamında yazar.
+Thanks to this asymmetric architecture, you can save **up to 90% in token costs** while building the same project as Claude Code. Claude only plans and reviews (low tokens), while Gemini writes thousands of lines of code in its free/cheap context.
 
 ---
 
-## 🖥️ Yeni Nesil TUI (Terminal Kullanıcı Arayüzü)
+## 🖥️ Next-Gen TUI (Terminal User Interface)
 
-`tui_features` dalı ile gelen yenilikler, myAgent'ı bir komut satırı aracından tam teşekküllü bir **AI-IDE** deneyimine dönüştürdü.
+The innovations brought by the `tui_features` branch have transformed myAgent from a command-line tool into a full-fledged **AI-IDE** experience.
 
 <div align="center">
 <img src="docs/tui_mockup.svg" alt="myAgent Modern TUI" width="800"/>
-<br/><em>Yeni nesil üç panelli responsive arayüz</em>
+<br/><em>Next-gen three-pane responsive interface</em>
 </div>
 
-### Öne Çıkan UX Özellikleri:
+### Featured UX Features:
 
-*   **Canlı Takip Paneli (Ctrl+E):** Sağ panelde Claude'un stratejik adımlarını ve Gemini'nin canlı loglarını (ruff, pytest, bash) anlık izleyin.
-*   **Entegre Dosya Gezgini (Ctrl+B):** Sol panelde proje yapısını görün, dizinler arasında gezinin. Ekran daraldığında otomatik gizlenir.
-*   **Kelime Seçim Modu (Ctrl+K):** Terminalin seçim kısıtlamalarından kurtulun. Tüm geçmişi seçilebilir ve kopyalanabilir bir alanda yönetin.
-*   **Anlık Ayarlar (Ctrl+S):** Uygulamadan çıkmadan modelleri değiştirin, API anahtarlarını güncelleyin ve modları (Auto-approve, Dry-run) yönetin.
-*   **Human-in-the-Loop:** Claude planı bitirdiğinde onayınızı bekler. Siz "Yürü" diyene kadar hiçbir dosya değişmez.
+*   **Live Process Tracking (Ctrl+E):** Monitor Claude's strategic steps and Gemini's live logs (ruff, pytest, bash) in real-time in the right panel.
+*   **Integrated File Explorer (Ctrl+B):** View the project structure and navigate through directories in the left panel. Auto-collapses on narrow screens.
+*   **Selection Mode (Ctrl+K):** Break free from terminal selection constraints. Manage the entire history in a selectable and copyable area.
+*   **Instant Settings (Ctrl+S):** Change models, update API keys, and manage modes (Auto-approve, Dry-run) without leaving the app.
+*   **Human-in-the-Loop:** Claude waits for your approval after planning. No files change until you say "Proceed".
 
 ---
 
-## 🧠 Otonom Güç: Aşama 6 Döngüsü
+## 🧠 Autonomous Power: Stage 6 Loop
 
-myAgent artık sadece kod yazmıyor, projenizi bir mühendis gibi "araştırıyor" ve "hata yapınca durup düşünüyor".
+myAgent no longer just writes code; it "researches" your project like an engineer and "stops to think when it makes a mistake":
 
 <div align="center">
-  <img src="docs/feature_autonomy.svg" width="400" alt="Otonom Döngü"/>
-  <img src="docs/feature_search.svg" width="400" alt="Derin Arama"/>
+  <img src="docs/feature_autonomy.svg" width="400" alt="Autonomous Loop"/>
+  <img src="docs/feature_search.svg" width="400" alt="Deep Search"/>
 </div>
 
-### 1. Derin Arama (Deep Search / ripgrep)
-`ripgrep` entegrasyonu sayesinde Claude, plan yapmadan önce tüm projeyi (milyonlarca satır olsa bile) milisaniyeler içinde tarar. Sizin sadece dosya ismini vermeniz yeterlidir; myAgent ilgili kodları bulur ve bağlamına ekler.
+### 1. Deep Search (ripgrep)
+With `ripgrep` integration, Claude scans the entire project (even millions of lines) in milliseconds before making a plan. You only need to provide the file name; myAgent finds the relevant code and adds it to its context.
 
-### 2. Gözlem Mekanizması (Observation)
-Gemini bir engelle karşılaştığında (örn: bir dosya planlanan yerde değilse veya bir kütüphane eksikse) sadece hata vermez. Durumu analiz eder ve Claude'a bir **OBSERVATION** raporu sunar. Claude bu rapora göre stratejisini anında günceller.
+### 2. Observation Mechanism
+When Gemini encounters an obstacle (e.g., a file is not where planned or a library is missing), it doesn't just give an error. It analyzes the situation and presents an **OBSERVATION** report to Claude. Claude instantly updates its strategy based on this report.
 
-### 3. Kendi Kendini İyileştirme (Self-Healing)
-Reviewer katmanı (Linter ve Testler) hata bulduğunda, sistem otonom bir düzeltme döngüsüne girer. Testler geçene kadar (veya maksimum tur dolana kadar) Gemini ve Claude paslaşarak kodu mükemmelleştirir.
+### 3. Self-Healing
+When the Reviewer layer (Linter and Tests) detects an error, the system enters an autonomous fix loop. Gemini and Claude pass the ball back and forth to perfect the code until tests pass (or max rounds are reached).
 
 ---
 
-## 🚀 Mimari Akış
+## 🚀 Architectural Flow
 
 ```mermaid
 flowchart TD
-    User(["👤 Sen"])
+    User(["👤 You"])
 
     subgraph claude ["🟣 Claude 3.5 — Brain (Planner & Reviewer)"]
         Search["**Deep Search (rg)**
-Arama & Araştırma"]
+Research & Search"]
         Planner["**Strategic Planner**
-Atomik Adımlar"]
+Atomic Steps"]
         Reviewer["**Code Reviewer**
-Linter & Test Kontrol"]
+Linter & Test Check"]
     end
 
     subgraph gemini ["🔵 Gemini 2.0 — Hands (Worker)"]
         Worker["**The Executor**
-FILE / BASH Otonomisi"]
+FILE / BASH Autonomy"]
     end
 
-    User -->|Görev| Search
+    User -->|Task| Search
     Search --> Planner
-    Planner -->|Plan| Approval{🤔 Onay?}
-    Approval -->|Evet| Worker
-    Approval -->|Hayır| User
+    Planner -->|Plan| Approval{🤔 Approval?}
+    Approval -->|Yes| Worker
+    Approval -->|No| User
     Worker -->|Observation| Planner
     Worker --> Reviewer
-    Reviewer -->|Hata Varsa| Worker
-    Reviewer -->|Temiz| User
+    Reviewer -->|If Error| Worker
+    Reviewer -->|Clean| User
 ```
 
 ---
 
-## ⌨️ Klavye Kısayolları
+## ⌨️ Keyboard Shortcuts
 
-| Tuş | Fonksiyon |
+| Key | Function |
 |---|---|
-| **`Ctrl+B`** | **Dosya Gezgini'ni (Sol Panel) aç / kapat** |
-| **`Ctrl+E`** | **İşlem Takibi'ni (Sağ Panel) aç / kapat** |
-| **`Ctrl+K`** | **Kelime Seçim Modu (Seç & Kopyala)** |
-| **`Ctrl+S`** | **Ayarlar Modalını aç** |
-| `Ctrl+L` | Ekranı ve logları temizle |
-| `Ctrl+Y` | Son AI cevabını panoya kopyala |
-| `↑` / `↓` | Komut geçmişinde gezin |
-| `Tab` | Komutları otomatik tamamla |
-| `F1` | Yardım menüsünü göster |
-| `Ctrl+C` | Durdur / Çıkış (Güvenli autosave) |
+| **`Ctrl+B`** | **Toggle File Explorer (Left Panel)** |
+| **`Ctrl+E`** | **Toggle Process Tracking (Right Panel)** |
+| **`Ctrl+K`** | **Selection Mode (Select & Copy)** |
+| **`Ctrl+S`** | **Open Settings Modal** |
+| `Ctrl+L` | Clear screen and logs |
+| `Ctrl+Y` | Copy last AI response to clipboard |
+| `↑` / `↓` | Navigate command history |
+| `Tab` | Autocomplete commands |
+| `F1` | Show help menu |
+| `Ctrl+C` | Stop / Exit (Safe autosave) |
 
 ---
 
-## 📦 Kurulum ve Çalıştırma
+## 📦 Installation and Execution
 
-### A — Docker (Önerilen - En Güçlü Mod)
-*Bu modda ajan tam otonomi (`sed`, `g++` vb. izinleri) ile çalışır ve sisteminizden izole kalır.*
+### A — Docker (Recommended - Most Powerful Mode)
+*In this mode, the agent works with full autonomy (`sed`, `g++`, etc. permissions) and stays isolated from your system.*
 
 ```bash
-git checkout tui_features
+git checkout myAgent_EN
 docker compose build
 ./run.sh
 ```
 
-### B — Lokal venv (Hızlı Mod)
+### B — Local venv (Fast Mode)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
@@ -136,17 +136,17 @@ python -m myagent
 
 ---
 
-## 🛠️ Teknik Özellikler
+## 🛠️ Technical Features
 
-- **Responsive TUI:** Ekran boyutuna göre otomatik düzenlenen arayüz (Auto-collapse).
-- **Git Checkpoint:** Büyük değişiklikler öncesi otomatik durum kaydı ve geri alma desteği.
-- **Token Tracker:** Anlık maliyet analizi ve "Tümü Claude olsaydı" karşılaştırması.
-- **Docker Sandbox:** Tehlikeli komutlar için tam güvenlikli kum havuzu.
+- **Responsive TUI:** Automatically arranged interface based on screen size (Auto-collapse).
+- **Git Checkpoint:** Automatic state saving and undo support before major changes.
+- **Token Tracker:** Real-time cost analysis and "What if it were all Claude" comparison.
+- **Docker Sandbox:** Full security sandbox for dangerous commands.
 
 <div align="center">
 
 ---
 
-*Claude Düşünür. Gemini Çalışır. myAgent Yönetir.*
+*Claude Thinks. Gemini Works. myAgent Manages.*
 
 </div>

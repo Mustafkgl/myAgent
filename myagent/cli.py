@@ -69,27 +69,26 @@ class SessionState:
     # ── Pronoun / continuation resolution ───────────────────────────────────
 
     # Keywords that mean "keep going on the last project"
-    _CONTINUE_KW = frozenset({"devam", "devam et", "continue", "devam ettr"})
+    _CONTINUE_KW = frozenset({"continue", "keep going", "proceed"})
 
     # Keywords that mean "fix the last project"
     _FIX_KW = frozenset({
-        "düzelt", "düzeltle", "fix", "hataları düzelt", "hataları gider",
-        "fix it", "fix bugs", "bugs", "bug fix",
+        "fix", "fix it", "resolve errors", "fix bugs", "bugs", "bug fix",
     })
 
     # Keywords that mean "add tests"
     _TEST_KW = frozenset({
-        "test", "test ekle", "testler yaz", "add tests", "write tests", "testleri yaz",
+        "test", "add tests", "write tests", "test it",
     })
 
     # Keywords that mean "run / launch"
     _RUN_KW = frozenset({
-        "çalıştır", "başlat", "run", "start", "çalıştırır mısın", "başlatır mısın",
+        "run", "start", "execute", "launch",
     })
 
     # Pronouns that refer to the last project
-    _PRONOUNS = ("bunu", "buna", "bunu", "onu", "bu proje", "önceki", "son proje",
-                 "o proje", "onu", "bu kodu", "bu dosyaları")
+    _PRONOUNS = ("this", "it", "that project", "previous", "last project",
+                 "the project", "the code", "these files")
 
     def resolve(self, raw: str) -> tuple[str, str]:
         """Parse user input.
@@ -103,7 +102,7 @@ class SessionState:
             return raw, ""
 
         files = self.last_result.created_files
-        fnames = ", ".join(files[:6]) if files else "(yok)"
+        fnames = ", ".join(files[:6]) if files else "(none)"
         prev_note = (
             f"The user previously ran: \"{self.last_task}\"\n"
             f"Files created: {fnames}\n"
@@ -164,15 +163,15 @@ def _print_banner() -> None:
             (f"v{__version__}", "dim white"),
             ("  ·  ", "dim"),
             ("Claude", "bold medium_purple1"),
-            (" planlar  ", "dim"),
+            (" plans  ", "dim"),
             ("·", "dim"),
             ("  Gemini", "bold dodger_blue1"),
-            (" yürütür", "dim"),
+            (" executes", "dim"),
         ),
         border_style="dim",
         padding=(0, 2),
         expand=False,
-        subtitle="[dim]/help → yardım   /exit → çıkış[/]",
+        subtitle="[dim]/help → help   /exit → exit[/]",
     ))
     console.print()
 
@@ -196,8 +195,8 @@ def _print_help() -> None:
     console.print()
     console.print(Panel(
         Text.assemble(
-            ("Herhangi bir şey yaz", "bold white"),
-            (" — Claude soru mu görev mi olduğuna karar verir.", "dim"),
+            ("Type anything", "bold white"),
+            (" — Claude decides if it's a question or a task.", "dim"),
         ),
         border_style="dim",
         padding=(0, 1),
@@ -205,42 +204,42 @@ def _print_help() -> None:
     ))
     console.print()
 
-    console.print(_section("Görevler", [
-        ("<herhangi bir şey>",   "Doğal dil — Claude yönlendirir"),
-        ("/run <görev>",         "Chat'i atlayarak doğrudan çalıştır"),
-        ("/devam",               "Son projeye devam et"),
-        ("/düzelt  /fix",        "Son projede hataları düzelt"),
-        ("/test",                "Son projeye test yaz"),
+    console.print(_section("Tasks", [
+        ("<anything>",          "Natural language — Claude routes"),
+        ("/run <task>",         "Skip chat and run directly"),
+        ("/continue",           "Continue the last project"),
+        ("/fix",                "Fix issues in the last project"),
+        ("/test",               "Write tests for the last project"),
     ], "dodger_blue1"))
 
-    console.print(_section("Proje & Geçmiş", [
-        ("/geçmiş  /history",   "Geçmiş görevleri listele"),
-        ("/son  /last",         "Son görevin detayları"),
-        ("/dosyalar  /ls",      "Çalışma dizinindeki dosyalar"),
-        ("/temizle",            "Çalışma dizinini temizle"),
+    console.print(_section("Project & History", [
+        ("/history",            "List past tasks"),
+        ("/last",               "Details of the last task"),
+        ("/ls",                 "Files in the working directory"),
+        ("/clean",              "Clean the working directory"),
     ], "cyan2"))
 
-    console.print(_section("Sistem", [
-        ("/setup",              "Auth ve model ayarlarını yeniden yapılandır"),
-        ("/models",             "Mevcut modelleri listele"),
-        ("/config",             "Yapılandırmayı göster"),
-        ("/clear",              "Ekranı temizle"),
-        ("/help",               "Bu ekranı göster"),
-        ("/exit",               "Çıkış"),
+    console.print(_section("System", [
+        ("/setup",              "Reconfigure auth and models"),
+        ("/models",             "List available models"),
+        ("/config",             "Show configuration"),
+        ("/clear",              "Clear screen"),
+        ("/help",               "Show this screen"),
+        ("/exit",               "Exit"),
     ], "grey70"))
 
     from rich.syntax import Syntax
     examples = "\n".join([
-        "myagent ❯ basit bir şifre üreteci yaz",
-        "myagent ❯ fibonacci nedir, nasıl çalışır?",
-        "myagent ❯ buna GUI ekle",
-        "myagent ❯ az önce yazdığın kodu açıkla",
-        "myagent ❯ /düzelt",
-        "myagent ❯ /geçmiş",
+        "myagent ❯ write a simple password generator",
+        "myagent ❯ what is fibonacci and how does it work?",
+        "myagent ❯ add a GUI to this",
+        "myagent ❯ explain the code you just wrote",
+        "myagent ❯ /fix",
+        "myagent ❯ /history",
     ])
     console.print(Panel(
         Syntax(examples, "text", theme="monokai", background_color="default"),
-        title="[bold white]Örnekler[/]",
+        title="[bold white]Examples[/]",
         border_style="dim",
         padding=(0, 1),
         expand=False,
@@ -293,7 +292,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Maximum number of plan steps (default: 10)",
     )
     beh_grp.add_argument(
-        "--lang", metavar="tr|en", choices=["tr", "en"],
+        "--lang", metavar="en|tr", choices=["en", "tr"],
         help="Force output language (default: auto-detect from system locale)",
     )
     beh_grp.add_argument(
@@ -397,7 +396,7 @@ def _show_models() -> None:
     if get_claude_mode() == "api":
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if api_key:
-            print("  (API üzerinden getiriliyor...)", end="\r", flush=True)
+            print("  (fetching from API...)", end="\r", flush=True)
             models = fetch_claude_models(api_key)
             print("                                   ")
         else:
@@ -411,7 +410,7 @@ def _show_models() -> None:
     if get_gemini_mode() == "api":
         api_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
         if api_key:
-            print("  (API üzerinden getiriliyor...)", end="\r", flush=True)
+            print("  (fetching from API...)", end="\r", flush=True)
             models = fetch_gemini_models(api_key)
             print("                                   ")
         else:
@@ -460,7 +459,7 @@ def _show_config() -> None:
     console.print()
     console.print(Panel(
         t,
-        title="[bold white]Yapılandırma[/]",
+        title="[bold white]Configuration[/]",
         border_style="dim",
         padding=(0, 2),
         expand=False,
@@ -478,10 +477,10 @@ def _show_pipeline_sessions() -> None:
 
     sessions = list_sessions()
     if not sessions:
-        print("Kayıtlı pipeline oturumu yok.")
+        print("No saved pipeline sessions.")
         return
 
-    print(f"\n  Pipeline oturumları ({len(sessions)}):\n")
+    print(f"\n  Pipeline sessions ({len(sessions)}):\n")
     for i, s in enumerate(sessions, 1):
         ts = datetime.fromtimestamp(s.updated_at).strftime("%Y-%m-%d %H:%M")
         icon = "✓" if s.phase == "complete" else "⏸"
@@ -506,20 +505,20 @@ def _handle_resume(
     if session_id:
         state = load_session(session_id)
         if state is None:
-            print(f"Hata: '{session_id}' ID'li oturum bulunamadı.", file=sys.stderr)
+            print(f"Error: Session with ID '{session_id}' not found.", file=sys.stderr)
             sys.exit(1)
     else:
         state = load_latest_incomplete()
         if state is None:
-            print("Devam edilecek tamamlanmamış oturum bulunamadı.")
+            print("No incomplete session found to resume.")
             return
 
     if state.phase == "complete":
-        print(f"Oturum [{state.session_id}] zaten tamamlandı.")
+        print(f"Session [{state.session_id}] is already complete.")
         return
 
-    print(f"\n▶  Oturum devam ettiriliyor [{state.session_id}]  phase={state.phase}")
-    print(f"   Görev: {state.task[:80]}\n")
+    print(f"\n▶  Resuming session [{state.session_id}]  phase={state.phase}")
+    print(f"   Task: {state.task[:80]}\n")
 
     _handle_run(
         state.task,
@@ -557,7 +556,7 @@ def _handle_run(
     resume_state=None,
 ) -> "RunResult | None":
     if not task.strip():
-        print("Kullanım: /run <görev açıklaması>")
+        print("Usage: /run <task description>")
         return None
 
     from myagent.agent.pipeline import run
@@ -570,7 +569,7 @@ def _handle_run(
         if resolved_task != task:
             from myagent.ui import make_ui
             _ui = make_ui(verbose=verbose)
-            _ui.session_context_notice(f"Bağlam → \"{resolved_task[:80]}\"")
+            _ui.session_context_notice(f"Context → \"{resolved_task[:80]}\"")
 
     try:
         result = run(
@@ -588,20 +587,15 @@ def _handle_run(
             resume_state=resume_state,
         )
     except RuntimeError as exc:
-        print(f"Hata: {exc}")
+        print(f"Error: {exc}")
         return None
 
     if session:
         session.update(result)
 
-    # In TTY mode the rich UI already rendered a full summary panel — don't duplicate.
-    # In non-TTY mode (piped / CI) print the plain-text summary for scripting use.
     if not sys.stdout.isatty():
         output_lang = lang or SYSTEM_LANGUAGE
-        if output_lang == "tr":
-            print(f"\n{result.summary_tr}\n")
-        else:
-            print(f"\n{result.summary_en}\n")
+        print(f"\n{result.summary_en}\n")
 
     return result
 
@@ -632,35 +626,32 @@ def _show_last(session: "SessionState") -> None:
 
     ui = make_ui()
 
-    # Prefer live session data
-    r = None
     if session.last_result:
         r_live = session.last_result
-        files = "\n".join(f"  • {f}" for f in r_live.created_files) or "  (yok)"
+        files = "\n".join(f"  • {f}" for f in r_live.created_files) or "  (none)"
         status = "✓" if r_live.success else "✗"
-        rev = "✓ review onaylı" if r_live.review_approved else ""
-        compl = "✓ tamamlama doğrulandı" if r_live.completion_verified else ""
+        rev = "✓ review approved" if r_live.review_approved else ""
+        compl = "✓ completion verified" if r_live.completion_verified else ""
         flags = "  ".join(filter(None, [rev, compl]))
         msg = (
-            f"Son görev: {r_live.task_original}\n"
-            f"Durum   : {status}  {flags}\n"
-            f"Dosyalar:\n{files}"
+            f"Last task: {r_live.task_original}\n"
+            f"Status   : {status}  {flags}\n"
+            f"Files:\n{files}"
         )
         ui.session_context_notice(msg)
         return
 
-    # Fall back to history
     r = last_run()
     if not r:
-        print("  (henüz kayıt yok)")
+        print("  (no records yet)")
         return
 
     status = "✓" if r.get("review_approved") or r.get("success") else "✗"
-    files = "\n".join(f"  • {f}" for f in r.get("files", [])) or "  (yok)"
+    files = "\n".join(f"  • {f}" for f in r.get("files", [])) or "  (none)"
     msg = (
-        f"Son görev ({r.get('timestamp','')[:16]}): {r.get('task','')}\n"
-        f"Durum   : {status}  ID: {r.get('id','')}\n"
-        f"Dosyalar:\n{files}"
+        f"Last task ({r.get('timestamp','')[:16]}): {r.get('task','')}\n"
+        f"Status   : {status}  ID: {r.get('id','')}\n"
+        f"Files:\n{files}"
     )
     ui.session_context_notice(msg)
 
@@ -671,17 +662,17 @@ def _clean_workspace(arg: str = "") -> None:
 
     if arg.strip().lower() not in ("--force", "-f", "force"):
         answer = input(
-            f"  {WORK_DIR} içindeki tüm dosyalar silinecek. Emin misiniz? (evet/hayır): "
+            f"  All files in {WORK_DIR} will be deleted. Are you sure? (yes/no): "
         ).strip().lower()
-        if answer not in ("evet", "e", "yes", "y"):
-            print("  İptal edildi.")
+        if answer not in ("yes", "y"):
+            print("  Cancelled.")
             return
 
     import shutil
     removed: list[str] = []
     for p in WORK_DIR.iterdir():
         if p.name.startswith("."):
-            continue  # keep .myagent history
+            continue
         try:
             if p.is_dir():
                 shutil.rmtree(p)
@@ -692,9 +683,9 @@ def _clean_workspace(arg: str = "") -> None:
             print(f"  ✗ {p.name}: {exc}")
 
     if removed:
-        print(f"  Silindi: {', '.join(removed)}")
+        print(f"  Deleted: {', '.join(removed)}")
     else:
-        print("  Zaten temiz.")
+        print("  Already clean.")
 
 
 def _handle_chat(
@@ -722,15 +713,13 @@ def _handle_chat(
         session.ui = make_ui(verbose=verbose)
     ui = session.ui
 
-    # Use spinner (no raw streaming) — avoids leaking routing metadata to screen
-    with ui.spinner("Claude düşünüyor…", color="medium_purple1"):
+    with ui.spinner("Claude is thinking…", color="medium_purple1"):
         route = session.chat.route(raw)
 
     if route.action == "answer":
         ui.chat_answer(route.answer)
         return
 
-    # TASK — run through the pipeline
     task = route.task or raw
     result = _handle_run(
         task,
@@ -747,7 +736,6 @@ def _handle_chat(
         session=session,
     )
 
-    # Feed result summary back into chat history for context
     if result and session.chat:
         session.chat.add_task_result(
             task=result.task_original,
@@ -765,11 +753,10 @@ def _handle_devam(session: "SessionState", run_kwargs: dict) -> None:
 
     console = Console()
 
-    # Build candidate list: current session first, then history (skip duplicates)
-    candidates: list[tuple[str, str, str]] = []  # (label, task, context_hint)
+    candidates: list[tuple[str, str, str]] = []
 
     if session.last_task:
-        candidates.append(("Bu oturum", session.last_task, ""))
+        candidates.append(("This session", session.last_task, ""))
 
     seen = {session.last_task}
     for rec in load_recent(8):
@@ -781,10 +768,9 @@ def _handle_devam(session: "SessionState", run_kwargs: dict) -> None:
         candidates.append((ts, task, ""))
 
     if not candidates:
-        console.print("\n  [dim]Henüz tamamlanmış görev yok.[/]\n")
+        console.print("\n  [dim]No completed tasks yet.[/]\n")
         return
 
-    # Render selection table
     t = Table.grid(padding=(0, 2))
     t.add_column(style="bold dodger_blue1", min_width=3)
     t.add_column(style="dim", min_width=14)
@@ -796,13 +782,13 @@ def _handle_devam(session: "SessionState", run_kwargs: dict) -> None:
     console.print()
     console.print(Panel(
         t,
-        title="[bold dodger_blue1]/devam — hangi göreve devam edelim?[/]",
+        title="[bold dodger_blue1]/continue — which task should we continue?[/]",
         title_align="left",
         border_style="dodger_blue1",
         padding=(0, 1),
         width=w,
     ))
-    console.print(f"  [dim]Seç (1–{len(candidates)}) veya Enter = 1, q = iptal:[/] ", end="")
+    console.print(f"  [dim]Select (1–{len(candidates)}) or Enter = 1, q = cancel:[/] ", end="")
 
     try:
         choice = input().strip()
@@ -812,12 +798,12 @@ def _handle_devam(session: "SessionState", run_kwargs: dict) -> None:
 
     if choice == "" :
         idx = 0
-    elif choice.lower() in ("q", "quit", "iptal"):
+    elif choice.lower() in ("q", "quit", "cancel"):
         return
     elif choice.isdigit() and 1 <= int(choice) <= len(candidates):
         idx = int(choice) - 1
     else:
-        console.print("  [dim]Geçersiz seçim.[/]")
+        console.print("  [dim]Invalid selection.[/]")
         return
 
     _, task, ctx = candidates[idx]
@@ -838,7 +824,7 @@ def _show_workspace_files() -> None:
     from myagent.memory.history import get_file_owners
 
     owners = get_file_owners()
-    print(f"\n  Çalışma dizini: {WORK_DIR}")
+    print(f"\n  Work directory: {WORK_DIR}")
     any_file = False
     for p in sorted(WORK_DIR.iterdir()):
         if p.name.startswith("."):
@@ -848,7 +834,7 @@ def _show_workspace_files() -> None:
         print(f"  {'d' if p.is_dir() else 'f'}  {p.name}{task_hint}")
         any_file = True
     if not any_file:
-        print("  (boş)")
+        print("  (empty)")
     print()
 
 
@@ -858,9 +844,9 @@ def _show_workspace_files() -> None:
 
 _COMMANDS = [
     "/help", "/exit", "/quit", "/clear", "/cls",
-    "/run", "/devam", "/düzelt", "/fix", "/test",
-    "/geçmiş", "/history", "/son", "/last",
-    "/dosyalar", "/ls", "/temizle", "/setup",
+    "/run", "/continue", "/fix", "/test",
+    "/history", "/last",
+    "/ls", "/clean", "/setup",
     "/models", "/config",
 ]
 
@@ -890,7 +876,7 @@ def _setup_readline() -> None:
         readline.parse_and_bind("tab: complete")
 
     except ImportError:
-        pass  # Windows fallback — no readline, silent
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -923,7 +909,6 @@ def _repl(
     from myagent import interrupt as _interrupt
 
     while True:
-        # Commit any Live panel before showing the prompt
         if session.ui is not None:
             session.ui.stop_live()
         try:
@@ -938,7 +923,6 @@ def _repl(
         if not raw:
             continue
 
-        # Strip leading "/" — support /command style like Claude Code / Gemini
         if raw.startswith("/"):
             raw = raw[1:]
             if not raw:
@@ -948,41 +932,39 @@ def _repl(
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        # Wrap entire command in interrupt context so ESC is detected across
-        # all steps of a pipeline, not only inside individual streaming calls.
         with _interrupt.context():
             try:
-                if cmd in ("exit", "quit", "çıkış", "cikis"):
+                if cmd in ("exit", "quit"):
                     print("Goodbye.")
                     break
 
-                elif cmd in ("help", "yardım", "yardim"):
+                elif cmd in ("help", "h"):
                     _print_help()
 
                 elif cmd == "run":
                     _handle_run(arg, session=session, **_run_kwargs)
 
-                elif cmd in ("devam", "continue") or raw.lower() == "devam et":
+                elif cmd in ("continue", "proceed"):
                     _handle_devam(session, _run_kwargs)
 
-                elif cmd in ("düzelt", "duzeltle", "fix", "düzeltle"):
-                    resolved, ctx = session.resolve("düzelt")
+                elif cmd == "fix":
+                    resolved, ctx = session.resolve("fix")
                     _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-                elif raw.lower() in ("test ekle", "testler yaz", "add tests"):
-                    resolved, ctx = session.resolve("test ekle")
+                elif cmd == "test":
+                    resolved, ctx = session.resolve("test")
                     _handle_run(resolved, session=session, session_context=ctx, **_run_kwargs)
 
-                elif cmd in ("geçmiş", "gecmis", "history", "hist"):
+                elif cmd in ("history", "hist"):
                     _show_history(arg)
 
-                elif cmd in ("son", "last"):
+                elif cmd in ("last"):
                     _show_last(session)
 
-                elif cmd in ("temizle", "clean", "clear-workspace"):
+                elif cmd in ("clean", "clear-workspace"):
                     _clean_workspace(arg)
 
-                elif cmd in ("dosyalar", "files", "ls"):
+                elif cmd in ("ls", "files"):
                     _show_workspace_files()
 
                 elif cmd == "setup":
@@ -1006,11 +988,11 @@ def _repl(
             except SystemExit:
                 raise
             except _interrupt.Interrupted:
-                pass  # cancel message already printed by streaming()
+                pass
             except KeyboardInterrupt:
                 print()
             except Exception as exc:
-                print(f"  Hata: {exc}")
+                print(f"  Error: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -1021,11 +1003,9 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    # ── 0. Load persisted API keys from ~/.myagent/.env ──────────────────────
     from myagent.auth_screen import _load_env_file
     _load_env_file()
 
-    # ── 1. Apply runtime overrides from flags ────────────────────────────────
     from myagent.config.auth import apply_overrides, save_config
     apply_overrides(
         claude_model=args.claude_model,
@@ -1035,7 +1015,6 @@ def main() -> None:
         max_steps=str(args.max_steps) if args.max_steps is not None else None,
     )
 
-    # ── 2. Apply env/settings overrides ─────────────────────────────────────
     if args.work_dir:
         import os
         os.environ["MYAGENT_WORK_DIR"] = str(Path(args.work_dir).resolve())
@@ -1043,7 +1022,6 @@ def main() -> None:
     if args.max_steps is not None:
         save_config({"max_steps": args.max_steps})
 
-    # ── 3. Utility-only flags (no wizard needed) ─────────────────────────────
     if args.setup:
         from myagent.setup_wizard import run_wizard
         run_wizard()
@@ -1074,26 +1052,23 @@ def main() -> None:
         )
         return
 
-    # ── 4. First-run wizard ──────────────────────────────────────────────────
     from myagent.config.auth import is_configured
     if not is_configured():
-        print("\nİlk çalıştırma — kurulum sihirbazı başlatılıyor...")
+        print("\nFirst run — starting setup wizard...")
         from myagent.setup_wizard import run_wizard
         run_wizard()
 
-    # ── 5. Validate required credentials ────────────────────────────────────
     from myagent.config.settings import validate
     missing = validate()
     if missing:
         print(
-            f"\nHata: şu ortam değişkenleri tanımlı değil: {', '.join(missing)}\n"
-            + "\n".join(f"  export {v}=değer" for v in missing)
-            + "\n  veya  myagent --setup  ile auth modunu değiştirin.",
+            f"\nError: the following environment variables are not defined: {', '.join(missing)}\n"
+            + "\n".join(f"  export {v}=value" for v in missing)
+            + "\n  or use  myagent --setup  to change auth mode.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # ── 6. One-shot mode ─────────────────────────────────────────────────────
     batch = not args.sequential
     clarify = args.clarify
     review = not args.no_review
@@ -1115,11 +1090,10 @@ def main() -> None:
             auto_deps=auto_deps,
             verify_completion=verify_completion,
             max_completion_rounds=max_completion_rounds,
-            session=None,   # no session state in one-shot mode
+            session=None,
         )
         return
 
-    # ── 7. Interactive TUI or REPL ────────────────────────────────────────────
     if args.tui and sys.stdout.isatty():
         from myagent.tui import start_tui
         session = SessionState()

@@ -33,14 +33,14 @@ _console = Console()
 
 _PLANNER_OPTS = [
     # (mode, short_name, detail, env_hint)
-    (API, "API Anahtarı",   "~3s/plan",  "ANTHROPIC_API_KEY"),
-    (CLI, "Claude Code",    "~5s/plan",  "OAuth — ayrıca kurulum gerekmez"),
+    (API, "API Key",         "~3s/plan",  "ANTHROPIC_API_KEY"),
+    (CLI, "Claude Code",    "~5s/plan",  "OAuth — no installation needed"),
 ]
 
 _WORKER_OPTS = [
-    (API,           "Gemini API",   "~2s/adım",  "Hızlı — GEMINI_API_KEY gerekli"),
-    (CLAUDE_WORKER, "Claude Code",  "~5s/adım",  "Giriş yapılmış hesabı kullanır"),
-    (CLI,           "Gemini CLI",   "~40s/adım", "Yavaş — Node.js her adımda başlar"),
+    (API,           "Gemini API",   "~2s/step",  "Fast — GEMINI_API_KEY required"),
+    (CLAUDE_WORKER, "Claude Code",  "~5s/step",  "Uses logged-in account"),
+    (CLI,           "Gemini CLI",   "~40s/step", "Slow — Node.js starts each step"),
 ]
 
 
@@ -53,44 +53,44 @@ def run_wizard() -> None:
     _console.print(Panel(
         Text.assemble(
             ("myagent", "bold medium_purple1"),
-            ("  Kurulum Sihirbazı", "bold white"),
+            ("  Setup Wizard", "bold white"),
         ),
         border_style="medium_purple1",
         padding=(0, 2),
         expand=False,
-        subtitle="[dim]3 adımda yapılandırma[/]",
+        subtitle="[dim]Configuration in 3 steps[/]",
     ))
     _console.print()
 
-    with _console.status("[dim]Sistem taranıyor…[/]", spinner="dots"):
+    with _console.status("[dim]Scanning system…[/]", spinner="dots"):
         claude_modes = detect_claude()
         gemini_modes = detect_gemini()
 
     if not claude_modes:
         _fatal(
-            "Claude bağlantısı kurulamadı.\n\n"
-            "  Şunlardan birini yapın:\n"
+            "Could not connect to Claude.\n\n"
+            "  Please do one of the following:\n"
             "  [dim]• export ANTHROPIC_API_KEY=sk-ant-…[/]\n"
             "  [dim]• claude login[/]"
         )
     if not gemini_modes:
         _fatal(
-            "Worker backend bulunamadı.\n\n"
-            "  Şunlardan birini yapın:\n"
+            "Worker backend not found.\n\n"
+            "  Please do one of the following:\n"
             "  [dim]• export GEMINI_API_KEY=AIza…[/]\n"
             "  [dim]• claude login[/]"
         )
 
-    # ── Adım 1: Planner (Claude) auth ──────────────────────────────────────
-    _step_header(1, 3, "Planner", "Claude nasıl bağlanacak?")
+    # ── Step 1: Planner (Claude) auth ──────────────────────────────────────
+    _step_header(1, 3, "Planner", "How should Claude connect?")
     claude_mode = _pick_planner(claude_modes)
 
-    # ── Adım 2: Worker backend ──────────────────────────────────────────────
-    _step_header(2, 3, "Worker", "Görevleri kim yürütecek?")
+    # ── Step 2: Worker backend ──────────────────────────────────────────────
+    _step_header(2, 3, "Worker", "Who will execute the tasks?")
     gemini_mode = _pick_worker(gemini_modes)
 
-    # ── Adım 3: Model ────────────────────────────────────────────────────────
-    _step_header(3, 3, "Model", "Hangi Claude modeli kullanılsın?")
+    # ── Step 3: Model ────────────────────────────────────────────────────────
+    _step_header(3, 3, "Model", "Which Claude model should be used?")
     claude_model = _pick_claude_model(claude_mode)
 
     # Worker model — derived, no extra step
@@ -100,13 +100,13 @@ def run_wizard() -> None:
     elif gemini_mode == CLAUDE_WORKER:
         gemini_model = claude_model
         _console.print(
-            f"  [dim]Worker modeli → Planner ile aynı:[/]  "
+            f"  [dim]Worker model → Same as Planner:[/]  "
             f"[medium_purple1]{claude_model}[/]"
         )
     else:
         gemini_model = GEMINI_DEFAULT
         _console.print(
-            f"  [dim]Gemini CLI varsayılan modeli:[/]  "
+            f"  [dim]Gemini CLI default model:[/]  "
             f"[dodger_blue1]{gemini_model}[/]"
         )
 
@@ -127,7 +127,7 @@ def run_wizard() -> None:
 def _step_header(step: int, total: int, title: str, subtitle: str) -> None:
     _console.print()
     _console.print(Rule(
-        f"[bold white] Adım {step}/{total} [/]  [dim]{title}[/]",
+        f"[bold white] Step {step}/{total} [/]  [dim]{title}[/]",
         style="dim",
     ))
     if subtitle:
@@ -152,8 +152,8 @@ def _pick_planner(available: list[AuthMode]) -> AuthMode:
         _console.print(f"  [green3]✓[/] [bold white]{name}[/]  [dim]{detail}[/]")
         if unavail:
             um, uname, _, uhint = unavail[0]
-            _console.print(f"  [dim]✗ {uname}  ({uhint} tanımlı değil)[/]")
-        _console.print(f"\n  [dim]→ Otomatik seçildi[/]")
+            _console.print(f"  [dim]✗ {uname}  ({uhint} not defined)[/]")
+        _console.print(f"\n  [dim]→ Automatically selected[/]")
         return m
 
     return _menu(
@@ -178,7 +178,7 @@ def _pick_worker(available: list[AuthMode]) -> AuthMode:
     if len(avail) == 1:
         m, name, detail, hint = avail[0]
         _console.print(f"  [green3]✓[/] [bold white]{name}[/]  [dim]{detail}[/]")
-        _console.print(f"\n  [dim]→ Otomatik seçildi[/]")
+        _console.print(f"\n  [dim]→ Automatically selected[/]")
         return m
 
     # Show available options + unavailable ones dimmed at the bottom
@@ -211,7 +211,7 @@ def _pick_worker(available: list[AuthMode]) -> AuthMode:
     _console.print(Panel(t, border_style="dim", padding=(0, 1), expand=False))
 
     while True:
-        prompt = f"  [dim]Seçim [1-{len(selectable)}, Enter={1}]:[/] [dodger_blue1]"
+        prompt = f"  [dim]Selection [1-{len(selectable)}, Enter={1}]:[/] [dodger_blue1]"
         raw = _console.input(prompt).strip()
         _console.print("[/]", end="")
         if not raw:
@@ -222,7 +222,7 @@ def _pick_worker(available: list[AuthMode]) -> AuthMode:
             chosen_name = next(n for m, n, *_ in avail if m == chosen)
             _console.print(f"  [dodger_blue1]✓[/] [bold white]{chosen_name}[/]")
             return chosen
-        _console.print(f"  [red1]Geçersiz.[/] [dim]1-{len(selectable)} arası veya Enter[/]")
+        _console.print(f"  [red1]Invalid.[/] [dim]Between 1-{len(selectable)} or Enter[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -244,8 +244,8 @@ def _pick_claude_model(mode: AuthMode) -> str:
         t.add_row(f"{i})", f"[bold white]{m.id}[/]{star}", f"{m.description}{aliases}")
 
     extra_start = len(models) + 1
-    t.add_row(f"{extra_start})", "[dim]Manuel giriş[/]", "")
-    t.add_row(f"{extra_start + 1})", "[dim]Varsayılanı kullan[/]", f"[dim]{default}[/]")
+    t.add_row(f"{extra_start})", "[dim]Manual input[/]", "")
+    t.add_row(f"{extra_start + 1})", "[dim]Use default[/]", f"[dim]{default}[/]")
 
     _console.print(Panel(t, border_style="dim", padding=(0, 1), expand=False))
 
@@ -256,7 +256,7 @@ def _pick_claude_model(mode: AuthMode) -> str:
     )
 
     while True:
-        prompt = f"  [dim]Seçim [1-{extra_start + 1}, Enter={rec_idx}]:[/] [medium_purple1]"
+        prompt = f"  [dim]Selection [1-{extra_start + 1}, Enter={rec_idx}]:[/] [medium_purple1]"
         raw = _console.input(prompt).strip()
         _console.print("[/]", end="")
 
@@ -264,12 +264,12 @@ def _pick_claude_model(mode: AuthMode) -> str:
             raw = str(rec_idx)
 
         if not raw.isdigit() or not (1 <= int(raw) <= extra_start + 1):
-            _console.print(f"  [red1]Geçersiz.[/] [dim]1-{extra_start + 1} arası veya Enter[/]")
+            _console.print(f"  [red1]Invalid.[/] [dim]Between 1-{extra_start + 1} or Enter[/]")
             continue
 
         choice = int(raw)
         if choice == extra_start + 1:
-            _console.print(f"  [medium_purple1]✓[/] Varsayılan: [bold]{default}[/]")
+            _console.print(f"  [medium_purple1]✓[/] Default: [bold]{default}[/]")
             return default
         if choice == extra_start:
             val = _console.input("  [dim]Model ID:[/] [medium_purple1]").strip()
@@ -290,7 +290,7 @@ def _pick_gemini_model_inline() -> str:
     import os
     api_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
     if api_key:
-        with _console.status("[dim]Gemini modelleri getiriliyor…[/]", spinner="dots"):
+        with _console.status("[dim]Fetching Gemini models…[/]", spinner="dots"):
             models = fetch_gemini_models(api_key)
     else:
         models = GEMINI_CURATED
@@ -306,10 +306,10 @@ def _pick_gemini_model_inline() -> str:
         t.add_row(f"{i})", f"[bold white]{m.id}[/]{star}", m.description)
 
     extra_start = len(models) + 1
-    t.add_row(f"{extra_start})", "[dim]Varsayılanı kullan[/]", f"[dim]{default}[/]")
+    t.add_row(f"{extra_start})", "[dim]Use default[/]", f"[dim]{default}[/]")
 
     _console.print()
-    _console.print(Rule("[dim] Gemini modeli [/]", style="dim"))
+    _console.print(Rule("[dim] Gemini model [/]", style="dim"))
     _console.print()
     _console.print(Panel(t, border_style="dim", padding=(0, 1), expand=False))
 
@@ -319,7 +319,7 @@ def _pick_gemini_model_inline() -> str:
     )
 
     while True:
-        prompt = f"  [dim]Seçim [1-{extra_start}, Enter={rec_idx}]:[/] [dodger_blue1]"
+        prompt = f"  [dim]Selection [1-{extra_start}, Enter={rec_idx}]:[/] [dodger_blue1]"
         raw = _console.input(prompt).strip()
         _console.print("[/]", end="")
         if not raw:
@@ -327,12 +327,12 @@ def _pick_gemini_model_inline() -> str:
         if raw.isdigit() and 1 <= int(raw) <= extra_start:
             choice = int(raw)
             if choice == extra_start:
-                _console.print(f"  [dodger_blue1]✓[/] Varsayılan: [bold]{default}[/]")
+                _console.print(f"  [dodger_blue1]✓[/] Default: [bold]{default}[/]")
                 return default
             selected = models[choice - 1]
             _console.print(f"  [dodger_blue1]✓[/] [bold]{selected.id}[/]")
             return selected.id
-        _console.print(f"  [red1]Geçersiz.[/] [dim]1-{extra_start} arası veya Enter[/]")
+        _console.print(f"  [red1]Invalid.[/] [dim]Between 1-{extra_start} or Enter[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +359,7 @@ def _menu(
     rec_idx = next(i for i, (m, *_) in enumerate(opts, 1) if m == recommended)
 
     while True:
-        prompt = f"  [dim]Seçim [1-{len(opts)}, Enter={rec_idx}]:[/] [{color}]"
+        prompt = f"  [dim]Selection [1-{len(opts)}, Enter={rec_idx}]:[/] [{color}]"
         raw = _console.input(prompt).strip()
         _console.print("[/]", end="")
         if not raw:
@@ -368,7 +368,7 @@ def _menu(
             chosen = opts[int(raw) - 1]
             _console.print(f"  [{color}]✓[/] [bold white]{chosen[1]}[/]")
             return chosen[0]
-        _console.print(f"  [red1]Geçersiz.[/] [dim]1-{len(opts)} arası veya Enter[/]")
+        _console.print(f"  [red1]Invalid.[/] [dim]Between 1-{len(opts)} or Enter[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +379,7 @@ def _load_claude_models(mode: AuthMode) -> list[ModelInfo]:
     if mode == API:
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if api_key:
-            with _console.status("[dim]Claude modelleri getiriliyor…[/]", spinner="dots"):
+            with _console.status("[dim]Fetching Claude models…[/]", spinner="dots"):
                 return fetch_claude_models(api_key)
     return CLAUDE_CURATED
 
@@ -401,7 +401,7 @@ def _summary(
     }.get(gemini_mode, gemini_mode)
 
     planner_name = {
-        API: "API Anahtarı",
+        API: "API Key",
         CLI: "Claude Code",
     }.get(claude_mode, claude_mode)
 
@@ -412,17 +412,17 @@ def _summary(
     t.add_row("Planner",  f"[medium_purple1]{planner_name}[/]  [dim]{claude_model}[/]")
     t.add_row("Worker",   f"[dodger_blue1]{worker_name}[/]  [dim]{gemini_model}[/]")
     t.add_row("",         "")
-    t.add_row("Kayıt",    "[dim]~/.myagent/config.json[/]")
+    t.add_row("Save",     "[dim]~/.myagent/config.json[/]")
 
     _console.print(Panel(
         t,
-        title="[bold green3]✓ Kurulum tamamlandı[/]",
+        title="[bold green3]✓ Setup complete[/]",
         border_style="green3",
         padding=(0, 2),
         expand=False,
     ))
     _console.print()
-    _console.print("  [dim]Değiştirmek için:[/]  [bold]/setup[/]")
+    _console.print("  [dim]To change:[/]  [bold]/setup[/]")
     _console.print()
 
 
@@ -435,7 +435,7 @@ def _fatal(message: str) -> None:
     _console.print(Panel(
         Text.from_markup(message),
         border_style="red1",
-        title="[red1]Kurulum başarısız[/]",
+        title="[red1]Setup failed[/]",
         padding=(0, 2),
         expand=False,
     ))

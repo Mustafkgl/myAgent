@@ -104,8 +104,8 @@ def _gemini_cli_state() -> str:
 
 class AuthScreen(Screen):
     BINDINGS = [
-        ("escape", "app.pop_screen", "İptal"),
-        ("ctrl+s",  "save",          "Kaydet"),
+        ("escape", "app.pop_screen", "Cancel"),
+        ("ctrl+s",  "save",          "Save"),
     ]
 
     CSS = """
@@ -156,21 +156,21 @@ class AuthScreen(Screen):
         yield Header()
         with VerticalScroll(id="auth-scroll"):
 
-            yield Static("Kimlik Doğrulama & Bağlantı Ayarları", classes="auth-title")
+            yield Static("Authentication & Connection Settings", classes="auth-title")
             yield Static(
-                "  ↑ ↓ seçenek değiştir  ·  Tab sonraki bölüm  ·  Enter / Kaydet butonu ile kaydet\n",
+                "  ↑ ↓ change option  ·  Tab next section  ·  Enter / Save button to save\n",
                 classes="auth-nav-hint",
             )
 
             # ── Claude (Planner) ──────────────────────────────────────────────
-            yield Static("PLANLAYAN  —  Claude  [dim]( ↑ ↓ ile seç )[/dim]", classes="auth-title")
+            yield Static("PLANNER  —  Claude  [dim]( ↑ ↓ to select )[/dim]", classes="auth-title")
             yield Static(
-                "  Aboneliğinle kullan (Claude Code) ya da API key gir (pay-as-you-go)",
+                "  Use with your subscription (Claude Code) or enter API key (pay-as-you-go)",
                 classes="auth-subtitle",
             )
             with RadioSet(id="claude-radio"):
-                yield RadioButton("API Anahtarı       ~3 s/plan  · pay-as-you-go", id="claude-api-rb")
-                yield RadioButton("Claude Code CLI    ~5 s/plan  · abonelik (Pro/Max)", id="claude-cli-rb")
+                yield RadioButton("API Key           ~3 s/plan  · pay-as-you-go", id="claude-api-rb")
+                yield RadioButton("Claude Code CLI    ~5 s/plan  · subscription (Pro/Max)", id="claude-cli-rb")
 
             yield Input(
                 password=True,
@@ -185,15 +185,15 @@ class AuthScreen(Screen):
             yield Static("─" * 60, classes="divider")
 
             # ── Worker (Gemini / Claude) ──────────────────────────────────────
-            yield Static("ÇALIŞAN  —  Worker  [dim]( ↑ ↓ ile seç )[/dim]", classes="auth-title")
+            yield Static("WORKER  —  Gemini/Claude  [dim]( ↑ ↓ to select )[/dim]", classes="auth-title")
             yield Static(
-                "  Görevleri kimin yürüteceğini seç  ·  Tab ile bu bölüme geçin",
+                "  Choose who will execute the tasks  ·  Tab to switch to this section",
                 classes="auth-subtitle",
             )
             with RadioSet(id="worker-radio"):
-                yield RadioButton("Gemini API         ~2 s/adım  · hızlı, GEMINI_API_KEY gerekli", id="worker-api-rb")
-                yield RadioButton("Claude Code        ~5 s/adım  · aynı aboneliği kullanır",        id="worker-claude-rb")
-                yield RadioButton("Gemini CLI         ~40 s/adım · yavaş, Node.js CLI",             id="worker-cli-rb")
+                yield RadioButton("Gemini API         ~2 s/step  · fast, GEMINI_API_KEY required", id="worker-api-rb")
+                yield RadioButton("Claude Code        ~5 s/step  · uses same subscription",        id="worker-claude-rb")
+                yield RadioButton("Gemini CLI         ~40 s/step · slow, Node.js CLI",             id="worker-cli-rb")
 
             yield Input(
                 password=True,
@@ -205,7 +205,7 @@ class AuthScreen(Screen):
             yield Static("", id="worker-cli-hint",   classes="cli-install-hint")
             yield Button("gemini login", id="gemini-login-btn", classes="login-btn", variant="primary")
 
-            yield Button("  Kaydet ve Devam Et  ", id="save-btn", classes="save-btn", variant="success")
+            yield Button("  Save and Continue  ", id="save-btn", classes="save-btn", variant="success")
 
         yield Footer()
 
@@ -269,21 +269,21 @@ class AuthScreen(Screen):
         else:
             key_input.display = False
             if self._claude_cli == "ready":
-                cli_status.update(Text("  ✓ Claude Code kurulu ve giriş yapılmış", style=C_OK))
+                cli_status.update(Text("  ✓ Claude Code installed and logged in", style=C_OK))
                 cli_status.display = True
                 cli_hint.display   = False
                 login_btn.display  = False
             elif self._claude_cli == "no_auth":
-                cli_status.update(Text("  ⚠ Claude Code kurulu ama giriş yapılmamış", style=C_WARN))
-                cli_hint.update("  Aşağıdaki butona tıklayarak tarayıcı üzerinden giriş yapın.")
+                cli_status.update(Text("  ⚠ Claude Code installed but not logged in", style=C_WARN))
+                cli_hint.update("  Click the button below to log in via browser.")
                 cli_status.display = True
                 cli_hint.display   = True
                 login_btn.display  = True
             else:  # not_installed
-                cli_status.update(Text("  ✗ Claude Code kurulu değil", style=C_ERR))
+                cli_status.update(Text("  ✗ Claude Code not installed", style=C_ERR))
                 cli_hint.update(
-                    "  Kurmak için:  curl -fsSL https://claude.ai/install.sh | sh\n"
-                    "  Kurduktan sonra bu ekranı yenileyin."
+                    "  To install:  curl -fsSL https://claude.ai/install.sh | sh\n"
+                    "  Refresh this screen after installation."
                 )
                 cli_status.display = True
                 cli_hint.display   = True
@@ -303,32 +303,32 @@ class AuthScreen(Screen):
         elif mode == CLAUDE_WORKER:
             key_input.display = False
             if self._claude_cli == "ready":
-                cli_status.update(Text("  ✓ Claude Code hazır, worker olarak kullanılacak", style=C_OK))
+                cli_status.update(Text("  ✓ Claude Code ready, will be used as worker", style=C_OK))
                 cli_status.display = True
                 cli_hint.display   = False
                 login_btn.display  = False
             else:
-                cli_status.update(Text("  ✗ Claude Code kurulu değil ya da giriş yapılmamış", style=C_ERR))
-                cli_hint.update("  Önce yukarıdaki Claude bölümünden giriş yapın.")
+                cli_status.update(Text("  ✗ Claude Code not installed or not logged in", style=C_ERR))
+                cli_hint.update("  Log in from the Claude section above first.")
                 cli_status.display = True
                 cli_hint.display   = True
                 login_btn.display  = False
         else:  # Gemini CLI
             key_input.display = False
             if self._gemini_cli == "ready":
-                cli_status.update(Text("  ✓ Gemini CLI kurulu ve hazır", style=C_OK))
+                cli_status.update(Text("  ✓ Gemini CLI installed and ready", style=C_OK))
                 cli_status.display = True
                 cli_hint.display   = False
                 login_btn.display  = False
             elif self._gemini_cli == "no_auth":
-                cli_status.update(Text("  ⚠ Gemini CLI kurulu ama giriş yapılmamış", style=C_WARN))
-                cli_hint.update("  Aşağıdaki butona tıklayarak giriş yapın.")
+                cli_status.update(Text("  ⚠ Gemini CLI installed but not logged in", style=C_WARN))
+                cli_hint.update("  Click the button below to log in.")
                 cli_status.display = True
                 cli_hint.display   = True
                 login_btn.display  = True
             else:
-                cli_status.update(Text("  ✗ Gemini CLI kurulu değil", style=C_ERR))
-                cli_hint.update("  Kurmak için:  npm install -g @google/gemini-cli")
+                cli_status.update(Text("  ✗ Gemini CLI not installed", style=C_ERR))
+                cli_hint.update("  To install:  npm install -g @google/gemini-cli")
                 cli_status.display = True
                 cli_hint.display   = True
                 login_btn.display  = False
@@ -380,5 +380,5 @@ class AuthScreen(Screen):
             "gemini_mode": worker_mode,
         })
 
-        self.app.notify("✓ Ayarlar kaydedildi.", severity="information", timeout=3)
+        self.app.notify("✓ Settings saved.", severity="information", timeout=3)
         self.app.pop_screen()

@@ -172,8 +172,8 @@ def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> st
     api_key = GEMINI_API_KEY or os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         raise RuntimeError(
-            "Gemini API modu seçili fakat GEMINI_API_KEY tanımlı değil.\n"
-            "  export GEMINI_API_KEY=AIza...  ya da  myagent> setup"
+            "Gemini API mode selected but GEMINI_API_KEY is not defined.\n"
+            "  export GEMINI_API_KEY=AIza...  or use  myagent> setup"
         )
     import google.generativeai as genai
     from myagent.agent.tokens import tracker
@@ -211,7 +211,7 @@ def _gemini_api_single(step: str, context: str = "", stream_callback=None) -> st
 def _gemini_api_batch(prompt: str, stream_callback=None) -> str:
     api_key = GEMINI_API_KEY or os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY tanımlı değil.")
+        raise RuntimeError("GEMINI_API_KEY is not defined.")
     import google.generativeai as genai
     from myagent.agent.tokens import tracker
     from myagent.config.auth import get_gemini_model
@@ -296,7 +296,7 @@ def _gemini_cli_run(full_prompt: str, stream_callback=None) -> str:
     result = _gemini_flag(full_prompt) or _gemini_stdin(full_prompt)
     if result.returncode != 0:
         raise RuntimeError(
-            f"Gemini CLI hata (kod {result.returncode}):\n"
+            f"Gemini CLI error (code {result.returncode}):\n"
             f"{(result.stderr or result.stdout).strip()}"
         )
     from myagent.agent.tokens import tracker
@@ -322,7 +322,7 @@ def _gemini_cli_stream(full_prompt: str, callback) -> str:
             bufsize=1,   # line-buffered; Node may still chunk, but flushes per \\n
         )
     except FileNotFoundError:
-        raise RuntimeError("`gemini` komutu bulunamadı.")
+        raise RuntimeError("`gemini` command not found.")
 
     from myagent import interrupt
     deadline = time.time() + 600
@@ -330,7 +330,7 @@ def _gemini_cli_stream(full_prompt: str, callback) -> str:
     stderr = proc.stderr.read() if proc.stderr else ""
     if proc.returncode not in (0, None):
         raise RuntimeError(
-            f"Gemini CLI hata (kod {proc.returncode}):\n{stderr.strip()[:300]}"
+            f"Gemini CLI error (code {proc.returncode}):\n{stderr.strip()[:300]}"
         )
     from myagent.agent.tokens import tracker
     tracker.add_gemini(len(full_prompt) // 4, len(output) // 4, m or get_gemini_model(), estimated=True)
@@ -358,9 +358,9 @@ def _gemini_stdin(prompt: str, model: str = ""):
             capture_output=True, text=True, timeout=600,
         )
     except FileNotFoundError:
-        raise RuntimeError("`gemini` komutu bulunamadı.")
+        raise RuntimeError("`gemini` command not found.")
     except subprocess.TimeoutExpired:
-        raise RuntimeError("Gemini CLI zaman aşımına uğradı.")
+        raise RuntimeError("Gemini CLI timed out.")
 
 
 # ---------------------------------------------------------------------------
@@ -391,26 +391,26 @@ def _claude_run(full_prompt: str, stream_callback=None) -> str:
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
             )
         except FileNotFoundError:
-            raise RuntimeError("`claude` komutu bulunamadı.")
+            raise RuntimeError("`claude` command not found.")
         from myagent import interrupt
         deadline = time.time() + 180
         output = interrupt.readline_interruptible(proc, stream_callback, deadline)
         stderr = proc.stderr.read() if proc.stderr else ""
         if proc.returncode not in (0, None):
             raise RuntimeError(
-                f"Claude worker CLI hata (kod {proc.returncode}):\n{stderr.strip()}"
+                f"Claude worker CLI error (code {proc.returncode}):\n{stderr.strip()}"
             )
         return output
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     except FileNotFoundError:
-        raise RuntimeError("`claude` komutu bulunamadı.")
+        raise RuntimeError("`claude` command not found.")
     except subprocess.TimeoutExpired:
-        raise RuntimeError("Claude worker CLI zaman aşımına uğradı.")
+        raise RuntimeError("Claude worker CLI timed out.")
     if result.returncode != 0:
         raise RuntimeError(
-            f"Claude worker CLI hata (kod {result.returncode}):\n"
+            f"Claude worker CLI error (code {result.returncode}):\n"
             f"{(result.stderr or result.stdout).strip()}"
         )
     return result.stdout

@@ -164,7 +164,7 @@ def format_history_table(n: int = 20) -> str:
     """Human-readable history for the `history` REPL command."""
     runs = load_recent(n)
     if not runs:
-        return "  (henüz kayıt yok)"
+        return "  (no records yet)"
 
     lines: list[str] = []
     for r in runs:

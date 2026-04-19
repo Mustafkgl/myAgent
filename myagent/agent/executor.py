@@ -54,9 +54,9 @@ class ExecutionResult:
 # Main entry point
 # ---------------------------------------------------------------------------
 
-_FILE_KEYWORDS = ("FILE:", "DOSYA:", "ФАЙЛ:")   # EN / TR / RU variants Gemini uses
-_BASH_KEYWORDS = ("BASH:", "KOMUT:", "КОМАНDA:")
-_OBS_KEYWORDS  = ("OBSERVATION:", "GÖZLEM:", "НАБЛЮДЕНИЕ:")
+_FILE_KEYWORDS = ("FILE:", "ФАЙЛ:")   # EN / RU variants Gemini uses
+_BASH_KEYWORDS = ("BASH:", "КОМАНDA:")
+_OBS_KEYWORDS  = ("OBSERVATION:", "НАБЛЮДЕНИЕ:")
 
 
 def _strip_prefix(line: str, keywords: tuple[str, ...]) -> str | None:

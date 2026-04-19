@@ -42,7 +42,7 @@ def clarify(task: str, verbose: bool = False) -> str:
         return task  # CLEAR
 
     # ── Ask the user ─────────────────────────────────────────────────────────
-    print("\n  Başlamadan önce birkaç sorum var:\n", flush=True)
+    print("\n  Before I start, I have a few questions:\n", flush=True)
     answers: list[str] = []
     for i, q in enumerate(questions, 1):
         print(f"  {i}. {q}", flush=True)
@@ -58,9 +58,9 @@ def clarify(task: str, verbose: bool = False) -> str:
         return task
 
     qa_block = "\n".join(answers)
-    enriched = f"{task}\n\nEk bağlam (kullanıcıdan):\n{qa_block}"
+    enriched = f"{task}\n\nExtra context (from user):\n{qa_block}"
     if verbose:
-        print(f"  [clarifier] zenginleştirilmiş görev:\n{enriched}\n", flush=True)
+        print(f"  [clarifier] enriched task:\n{enriched}\n", flush=True)
     return enriched
 
 

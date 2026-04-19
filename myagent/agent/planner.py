@@ -123,11 +123,11 @@ def _ripgrep(pattern: str, include_pattern: str = None) -> str:
         result = subprocess.run(cmd, cwd=WORK_DIR, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             return result.stdout
-        return f"Sonuç bulunamadı: {pattern}"
+        return f"No results found for: {pattern}"
     except FileNotFoundError:
-        return "Hata: 'rg' (ripgrep) sistemde yüklü değil."
+        return "Error: 'rg' (ripgrep) is not installed on the system."
     except Exception as e:
-        return f"Arama hatası: {str(e)}"
+        return f"Search error: {str(e)}"
 
 def _read_file_content(path_str: str) -> str:
     """Read full content of a file for Claude's deep understanding."""
@@ -139,9 +139,9 @@ def _read_file_content(path_str: str) -> str:
             if len(content) > 8192:
                 return content[:8192] + "\n... (truncated)"
             return content
-        return f"Hata: Dosya bulunamadı: {path_str}"
+        return f"Error: File not found: {path_str}"
     except Exception as e:
-        return f"Okuma hatası: {str(e)}"
+        return f"Read error: {str(e)}"
 
 # ---------------------------------------------------------------------------
 # Research Phase Loop (The "Thinking" before "Planning")
@@ -155,15 +155,15 @@ def _run_research(task: str, stream_callback=None) -> str:
     research_results = []
     
     if stream_callback:
-        stream_callback("\n[research] Proje taranıyor...\n")
+        stream_callback("\n[research] Scanning project...\n")
 
     # Limit research to top 3 keywords to keep it fast
     for kw in keywords[:3]:
         if kw.lower() in ("create", "make", "build", "change", "update", "delete", "with", "from", "import"):
             continue
         res = _ripgrep(kw)
-        if "Sonuç bulunamadı" not in res:
-            # Sadece ilk 5 eşleşmeyi alarak token tasarrufu yap
+        if "No results found" not in res:
+            # Only take the first 5 matches to save tokens
             lines = res.splitlines()[:5]
             research_results.append(f"Search (top 5) for '{kw}':\n" + "\n".join(lines))
             
@@ -304,7 +304,7 @@ def _build_interface(task: str, steps: list[str], mode: str) -> str:
 def _plan_via_api(task: str, stream_callback=None) -> str:
     if not ANTHROPIC_API_KEY:
         raise RuntimeError(
-            "Claude API modu seçili fakat ANTHROPIC_API_KEY tanımlı değil.\n"
+            "Claude API mode selected but ANTHROPIC_API_KEY is not defined.\n"
             "  export ANTHROPIC_API_KEY=sk-ant-...  ya da  myagent> setup"
         )
     import anthropic
@@ -351,7 +351,7 @@ def _plan_via_cli(task: str, stream_callback=None) -> str:
 
     output = run_claude_cli(cmd, full_prompt, model, timeout=120, stream_callback=stream_callback)
     if is_error(output):
-        raise RuntimeError("Claude CLI planlama başarısız. Token limiti veya bağlantı hatası.")
+        raise RuntimeError("Claude CLI planning failed. Token limit or connection error.")
     return output
 
 

@@ -19,20 +19,20 @@ def run_diagnostics() -> list[tuple[str, str, str]]:
     results = []
     
     # 1. Python Environment
-    results.append(("Sistem", *check_python()))
-    results.append(("Sistem", *check_venv()))
+    results.append(("System", *check_python()))
+    results.append(("System", *check_venv()))
     
     # 2. API Keys
     results.extend([("API", *res) for res in check_api_keys()])
     
     # 3. CLI Tools
-    results.extend([("Araçlar", *res) for res in check_cli_tools()])
+    results.extend([("Tools", *res) for res in check_cli_tools()])
     
     # 4. Core Packages
-    results.extend([("Paketler", *res) for res in check_packages()])
+    results.extend([("Packages", *res) for res in check_packages()])
     
     # 5. Infrastructure
-    results.append(("Altyapı", *check_docker()))
+    results.append(("Infra", *check_docker()))
     
     return results
 
@@ -41,12 +41,12 @@ def check_python() -> tuple[str, str]:
     v_str = f"{ver.major}.{ver.minor}.{ver.micro}"
     if ver.major >= 3 and ver.minor >= 10:
         return "✓", f"Python {v_str}"
-    return "✗", f"Python {v_str} (3.10+ önerilir)"
+    return "✗", f"Python {v_str} (3.10+ recommended)"
 
 def check_venv() -> tuple[str, str]:
     if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
-        return "✓", "Sanal ortam (venv) aktif"
-    return "!", "Sanal ortam (venv) aktif değil"
+        return "✓", "Virtual environment (venv) active"
+    return "!", "Virtual environment (venv) not active"
 
 def check_api_keys() -> list[tuple[str, str]]:
     claude = os.environ.get("ANTHROPIC_API_KEY")
@@ -56,12 +56,12 @@ def check_api_keys() -> list[tuple[str, str]]:
     if claude:
         res.append(("✓", f"Claude API Key: {claude[:8]}...{claude[-4:]}"))
     else:
-        res.append(("!", "Claude API Key bulunamadı (Claude Code modunda gerekmez)"))
+        res.append(("!", "Claude API Key not found (not required in Claude Code mode)"))
         
     if gemini:
         res.append(("✓", f"Gemini API Key: {gemini[:8]}...{gemini[-4:]}"))
     else:
-        res.append(("✗", "Gemini API Key bulunamadı (Google AI Studio'dan alabilirsiniz)"))
+        res.append(("✗", "Gemini API Key not found (you can get it from Google AI Studio)"))
         
     return res
 
@@ -75,9 +75,9 @@ def check_cli_tools() -> list[tuple[str, str]]:
     res = []
     for cmd, name in tools:
         if shutil.which(cmd):
-            res.append(("✓", f"{name} yüklü"))
+            res.append(("✓", f"{name} installed"))
         else:
-            res.append(("!", f"{name} bulunamadı"))
+            res.append(("!", f"{name} not found"))
     return res
 
 def check_packages() -> list[tuple[str, str]]:
@@ -91,16 +91,16 @@ def check_packages() -> list[tuple[str, str]]:
     for mod_name, name in pkgs:
         spec = importlib.util.find_spec(mod_name)
         if spec:
-            res.append(("✓", f"{name} paketi hazır"))
+            res.append(("✓", f"{name} package ready"))
         else:
-            res.append(("✗", f"{name} paketi eksik"))
+            res.append(("✗", f"{name} package missing"))
     return res
 
 def check_docker() -> tuple[str, str]:
     if shutil.which("docker"):
         try:
             subprocess.run(["docker", "ps"], capture_output=True, timeout=2)
-            return "✓", "Docker çalışıyor ve erişilebilir"
+            return "✓", "Docker running and accessible"
         except Exception:
-            return "!", "Docker yüklü ama çalışmıyor"
-    return "dim content", "Docker bulunamadı (Sandbox modu için gerekir)"
+            return "!", "Docker installed but not running"
+    return "dim content", "Docker not found (required for Sandbox mode)"

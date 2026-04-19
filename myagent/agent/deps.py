@@ -99,7 +99,7 @@ def scan_and_install(
                 ui.dep_installed(pip_name)
         else:
             if ui:
-                ui.dep_error(pip_name, "kurulum başarısız")
+                ui.dep_error(pip_name, "installation failed")
 
     return installed
 
@@ -183,12 +183,12 @@ def _install(pip_name: str, verbose: bool = False) -> bool:
             # uv not found → try pip next iteration
             if "No such file" in result.stderr or result.returncode == 127:
                 continue
-            print(f"  [deps] '{pip_name}' kurulum hatası: {result.stderr.strip()[:200]}", flush=True)
+            print(f"  [deps] '{pip_name}' install error: {result.stderr.strip()[:200]}", flush=True)
             return False
         except FileNotFoundError:
             continue   # uv not installed, try pip
         except subprocess.TimeoutExpired:
-            print(f"  [deps] '{pip_name}' kurulum zaman aşımı.", flush=True)
+            print(f"  [deps] '{pip_name}' install timeout.", flush=True)
             return False
-    print(f"  [deps] uv ve pip bulunamadı — '{pip_name}' kurulamadı.", flush=True)
+    print(f"  [deps] uv and pip not found — could not install '{pip_name}'.", flush=True)
     return False

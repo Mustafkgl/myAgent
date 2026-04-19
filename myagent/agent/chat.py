@@ -155,7 +155,7 @@ def _ask_claude(
 
 def _ask_via_api(system: str, history: list[dict], stream_callback=None) -> str:
     if not ANTHROPIC_API_KEY:
-        return "ACTION: ANSWER\nHata: ANTHROPIC_API_KEY tanımlı değil."
+        return "ACTION: ANSWER\nError: ANTHROPIC_API_KEY is not defined."
     try:
         import anthropic
         from myagent.agent.tokens import tracker
@@ -215,14 +215,14 @@ def _ask_via_cli(system: str, history: list[dict], stream_callback=None) -> str:
             output = interrupt.readline_interruptible(proc, stream_callback, deadline)
             if output.strip():
                 tracker.add_claude(len(full_prompt) // 4, len(output) // 4, model, estimated=True)
-            return output.strip() or "ACTION: ANSWER\nZaman aşımı."
+            return output.strip() or "ACTION: ANSWER\nTimed out."
         except Exception as exc:
             return f"ACTION: ANSWER\nHata: {exc}"
     else:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if result.returncode != 0:
-                return f"ACTION: ANSWER\nClaude CLI hata: {result.stderr.strip()[:200]}"
+                return f"ACTION: ANSWER\nClaude CLI error: {result.stderr.strip()[:200]}"
             tracker.add_claude(len(full_prompt) // 4, len(result.stdout) // 4, model, estimated=True)
             return result.stdout.strip()
         except Exception as exc:
@@ -237,7 +237,7 @@ def _parse(raw: str) -> RouteResult:
     """Parse Claude's structured ACTION: TASK / ACTION: ANSWER response."""
     text = raw.strip()
     if not text:
-        return RouteResult(action="answer", answer="(boş yanıt)")
+        return RouteResult(action="answer", answer="(empty response)")
 
     lines = text.splitlines()
     first = lines[0].strip().upper()
@@ -253,7 +253,7 @@ def _parse(raw: str) -> RouteResult:
 
     if first == "ACTION: ANSWER":
         answer = "\n".join(lines[1:]).strip()
-        return RouteResult(action="answer", answer=answer or "(boş yanıt)")
+        return RouteResult(action="answer", answer=answer or "(empty response)")
 
     # Claude didn't follow the format — treat as plain answer
     return RouteResult(action="answer", answer=text)

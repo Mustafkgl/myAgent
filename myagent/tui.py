@@ -298,12 +298,12 @@ class TuiAgentUI(AgentUI):
         self._log(Text("\n  Awaiting Approval: Proceed with plan? (y/n)", style="bold #c084fc"))
         self._update_sidebar("pipeline-status", Text("🤔 Awaiting Approval...", style="bold #c084fc"))
         
-        # Pipeline senkron bir worker thread'de çalıştığı için 
-        # TUI ana thread'inden gelen cevabı beklemek için bir Event kullanıyoruz.
+        # Since the pipeline runs in a synchronous worker thread, 
+        # we use an Event to wait for the response from the TUI main thread.
         self.app._approval_event = asyncio.Event()
         self.app._approval_result = False
         
-        # TUI ana thread'inde input'u odağa al ve placeholder'ı değiştir
+        # Focus the input in the TUI main thread and change the placeholder
         def prepare_input():
             try:
                 inp = self.app.query_one("#user-input", PromptInput)
@@ -313,10 +313,10 @@ class TuiAgentUI(AgentUI):
                 pass
         self.app.call_from_thread(prepare_input)
 
-        # Event set edilene kadar bu worker thread'i blokla
+        # Block this worker thread until the Event is set
         loop = self.app.call_from_thread(asyncio.get_running_loop)
         future = asyncio.run_coroutine_threadsafe(self.app._approval_event.wait(), loop)
-        future.result() # Bloklar!
+        future.result() # Blocks!
 
         def reset_input():
             try:
@@ -338,7 +338,7 @@ class TuiAgentUI(AgentUI):
                 try:
                     w = self.app.query_one("#pipeline-logs", Static)
                     current = str(w.renderable)
-                    # Sadece son 10 satırı tut ki sidebar şişmesin
+                    # Keep only the last 10 lines to prevent sidebar bloat
                     lines = (current + chunk).split("\n")[-10:]
                     w.update(Text("\n".join(lines), style="grey50"))
                 except Exception:

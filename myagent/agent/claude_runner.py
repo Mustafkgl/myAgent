@@ -118,5 +118,5 @@ def is_error(output: str) -> bool:
 
 def warn_skipped(context: str, error_code: int | None = None) -> None:
     """Print a visible warning when a Claude call is silently skipped."""
-    code_str = f" (hata kodu: {error_code})" if error_code is not None else ""
-    print(f"\n⚠  Claude {context} başarısız{code_str} — adım atlandı\n", flush=True)
+    code_str = f" (error code: {error_code})" if error_code is not None else ""
+    print(f"\n⚠  Claude {context} failed{code_str} — skipping step\n", flush=True)

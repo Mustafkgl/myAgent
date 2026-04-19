@@ -127,7 +127,7 @@ def _ask_claude(prompt: str, stream_callback=None) -> str:
         cmd = ["claude", "-p", full_prompt, "--model", model]
         output = run_claude_cli(cmd, full_prompt, model, timeout=120, stream_callback=stream_callback)
         if is_error(output):
-            warn_skipped("tamamlama kontrolü")
+            warn_skipped("completion check")
             return "COMPLETE"
         return output
 

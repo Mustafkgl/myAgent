@@ -210,8 +210,12 @@ Uygulama `prompt_toolkit + rich` tabanlı REPL ile açılır. Claude her girdiyi
 | `/status` | Token kullanımı, maliyet tasarrufu, verimlilik |
 | `/think` | Verbose modunu aç / kapat |
 | `/sessions` | Kayıtlı oturumları konu özetiyle listele |
-| `/load <n veya id>` | Oturum yükle |
-| `/rename <ad>` | Oturumu yeniden adlandır |
+| `/load <n\|id>` | Oturum yükle |
+| `/rename [n\|id] <ad>` | Oturumu yeniden adlandır (herhangi birini) |
+| `/delete <n\|id>` | Oturumu çöp kutusuna taşı |
+| `/trash` | Çöp kutusunu listele |
+| `/restore <n\|id>` | Çöp kutusundan geri al |
+| `/purge [n\|id\|all]` | Çöp kutusundan kalıcı sil |
 | `/new` | Yeni oturum başlat |
 | `/export` | Oturumu Markdown dosyasına aktar |
 | `/compact` | Konuşma geçmişini özetleyip sıkıştır |

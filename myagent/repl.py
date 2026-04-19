@@ -34,6 +34,14 @@ from rich.text import Text
 
 from myagent.agent.chat import Chat
 from myagent.agent.doctor import run_diagnostics
+from myagent.agent.sessions import (
+    extract_topic as _extract_topic,
+    resolve_session as _resolve_session,
+    session_delete, session_rename, session_restore, session_purge, trash_purge_all,
+    sessions_list as _sessions_list_shared,
+    sessions_save as _sessions_save_shared,
+    trash_list,
+)
 from myagent.ui import C_CLAUDE, C_DIM, C_ERR, C_GEMINI, C_OK, C_WARN, make_ui
 
 if TYPE_CHECKING:
@@ -60,11 +68,15 @@ _COMMANDS: list[tuple[str, str]] = [
     ("/exit",     "Çıkış"),
     ("/export",   "Oturumu markdown dosyasına aktar"),
     ("/help",     "Tüm komutları göster"),
+    ("/delete",   "Oturumu çöp kutusuna taşı  →  /delete <numara|id>"),
     ("/load",     "Oturum yükle  →  /load <numara veya id>"),
     ("/model",    "Model değiştir  →  /model claude|gemini <model>"),
     ("/new",      "Yeni oturum başlat"),
-    ("/rename",   "Oturumu yeniden adlandır  →  /rename <ad>"),
+    ("/purge",    "Çöp kutusundan kalıcı sil  →  /purge [numara|id|all]"),
+    ("/rename",   "Oturumu yeniden adlandır  →  /rename [numara|id] <ad>"),
+    ("/restore",  "Çöp kutusundan geri al  →  /restore <numara|id>"),
     ("/sessions", "Kayıtlı oturumları listele"),
+    ("/trash",    "Çöp kutusunu listele"),
     ("/status",   "Oturum istatistiklerini göster"),
     ("/think",    "Verbose modunu aç / kapat"),
 ]
@@ -90,47 +102,15 @@ class _SlashCompleter(Completer):
                 )
 
 # ---------------------------------------------------------------------------
-# Session persistence (mirrors tui.py logic)
+# Session persistence (delegates to myagent.agent.sessions)
 # ---------------------------------------------------------------------------
 
-_SESSIONS_DIR = Path.home() / ".myagent" / "sessions"
-
-
-def _extract_topic(messages: list[dict]) -> str:
-    """First user message, stripped to one line, max 120 chars."""
-    for m in messages:
-        if m.get("role") == "user":
-            text = m.get("text", "").replace("\n", " ").strip()
-            return text[:120]
-    return ""
-
-
 def _sessions_save(sid: str, name: str, messages: list[dict]) -> None:
-    import json
-    _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    data = {
-        "id": sid,
-        "name": name,
-        "updated_at": datetime.now().isoformat(),
-        "topic": _extract_topic(messages),
-        "messages": messages,
-    }
-    (_SESSIONS_DIR / f"{sid}.json").write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _sessions_save_shared(sid, name, messages)
 
 
 def _sessions_list() -> list[dict]:
-    import json
-    if not _SESSIONS_DIR.exists():
-        return []
-    out = []
-    for f in sorted(_SESSIONS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-        try:
-            out.append(json.loads(f.read_text(encoding="utf-8")))
-        except Exception:
-            pass
-    return out
+    return _sessions_list_shared()
 
 # ---------------------------------------------------------------------------
 # Banner
@@ -424,7 +404,6 @@ def _cmd_sessions() -> None:
         ts    = s.get("updated_at", "")[:16].replace("T", " ")
         n_msg = len(s.get("messages", []))
         topic = s.get("topic") or _extract_topic(s.get("messages", []))
-
         t.append(f"  [{i:2}]  ", style=C_DIM)
         t.append(f"{ts}  ", style="white")
         t.append(f"{n_msg:3} mesaj  ", style=C_DIM)
@@ -433,7 +412,12 @@ def _cmd_sessions() -> None:
             preview = topic[:88] + ("…" if len(topic) > 88 else "")
             t.append(f"        {preview}\n", style="italic")
         t.append("\n", style="")
-    t.append("  /load <numara veya id>  ile yükle\n\n", style=C_DIM)
+    n_trash = len(trash_list())
+    t.append("  /load · /rename · /delete  ile yönet", style=C_DIM)
+    if n_trash:
+        t.append(f"  ·  /trash ({n_trash} öğe)\n\n", style=C_DIM)
+    else:
+        t.append("\n\n", style="")
     _console.print(t)
 
 
@@ -442,15 +426,7 @@ def _cmd_load(state: ReplState, arg: str) -> None:
         _console.print(Text("  Kullanım: /load <numara veya id>\n", style=C_DIM))
         return
     sessions = _sessions_list()
-    data = None
-    if arg.isdigit():
-        idx = int(arg) - 1
-        if 0 <= idx < len(sessions):
-            data = sessions[idx]
-    else:
-        for s in sessions:
-            if s.get("id", "").startswith(arg):
-                data = s; break
+    data = _resolve_session(arg, sessions)
     if not data:
         _console.print(Text(f"  Oturum bulunamadı: {arg}\n", style=C_ERR))
         return
@@ -479,11 +455,100 @@ def _cmd_load(state: ReplState, arg: str) -> None:
 
 def _cmd_rename(state: ReplState, arg: str) -> None:
     if not arg:
-        _console.print(Text("  Kullanım: /rename <yeni ad>\n", style=C_DIM))
+        _console.print(Text(
+            "  Kullanım: /rename <yeni ad>  veya  /rename <numara|id> <yeni ad>\n",
+            style=C_DIM,
+        ))
+        return
+    parts = arg.split(maxsplit=1)
+    if len(parts) == 2 and (parts[0].isdigit() or len(parts[0]) >= 6):
+        sessions = _sessions_list()
+        s = _resolve_session(parts[0], sessions)
+        if not s:
+            _console.print(Text(f"  Oturum bulunamadı: {parts[0]}\n", style=C_ERR))
+            return
+        if session_rename(s["id"], parts[1]):
+            _console.print(Text(f"  ✓ Oturum adı güncellendi: {parts[1]}\n", style=C_OK))
         return
     state.sname = arg
     state.autosave()
     _console.print(Text(f"  ✓ Oturum adı: {arg}\n", style=C_OK))
+
+
+def _cmd_delete(arg: str) -> None:
+    if not arg:
+        _console.print(Text("  Kullanım: /delete <numara veya id>\n", style=C_DIM))
+        return
+    sessions = _sessions_list()
+    s = _resolve_session(arg, sessions)
+    if not s:
+        _console.print(Text(f"  Oturum bulunamadı: {arg}\n", style=C_ERR))
+        return
+    name = s.get("name", s["id"][:8])
+    if session_delete(s["id"]):
+        _console.print(Text(f"  ✓ Çöp kutusuna taşındı: {name}\n", style=C_OK))
+    else:
+        _console.print(Text("  ✗ Silinemedi.\n", style=C_ERR))
+
+
+def _cmd_trash() -> None:
+    items = trash_list()
+    if not items:
+        _console.print(Text("  Çöp kutusu boş.\n", style=C_DIM))
+        return
+    t = Text(f"\n  Çöp Kutusu ({len(items)}):\n\n", style=f"bold {C_CLAUDE}")
+    for i, s in enumerate(items[:20], 1):
+        sid   = s.get("id", "")[:8]
+        ts    = s.get("trashed_at", "")[:16].replace("T", " ")
+        n_msg = len(s.get("messages", []))
+        topic = s.get("topic") or _extract_topic(s.get("messages", []))
+        t.append(f"  [{i:2}]  ", style=C_DIM)
+        t.append(f"{ts}  ", style="white")
+        t.append(f"{n_msg:3} mesaj  ", style=C_DIM)
+        t.append(f"id:{sid}\n", style="dim")
+        if topic:
+            preview = topic[:88] + ("…" if len(topic) > 88 else "")
+            t.append(f"        {preview}\n", style="italic")
+        t.append("\n", style="")
+    t.append("  /restore <numara|id>  geri al  ·  /purge [numara|id|all]  kalıcı sil\n\n",
+             style=C_DIM)
+    _console.print(t)
+
+
+def _cmd_restore(arg: str) -> None:
+    if not arg:
+        _console.print(Text("  Kullanım: /restore <numara veya id>\n", style=C_DIM))
+        return
+    items = trash_list()
+    s = _resolve_session(arg, items)
+    if not s:
+        _console.print(Text(f"  Çöp kutusunda bulunamadı: {arg}\n", style=C_ERR))
+        return
+    name = s.get("name", s["id"][:8])
+    if session_restore(s["id"]):
+        _console.print(Text(f"  ✓ Geri alındı: {name}\n", style=C_OK))
+    else:
+        _console.print(Text("  ✗ Geri alınamadı.\n", style=C_ERR))
+
+
+def _cmd_purge(arg: str) -> None:
+    if not arg or arg.lower() == "all":
+        n = trash_purge_all()
+        if n:
+            _console.print(Text(f"  ✓ {n} oturum kalıcı olarak silindi.\n", style=C_OK))
+        else:
+            _console.print(Text("  Çöp kutusu zaten boş.\n", style=C_DIM))
+        return
+    items = trash_list()
+    s = _resolve_session(arg, items)
+    if not s:
+        _console.print(Text(f"  Çöp kutusunda bulunamadı: {arg}\n", style=C_ERR))
+        return
+    name = s.get("name", s["id"][:8])
+    if session_purge(s["id"]):
+        _console.print(Text(f"  ✓ Kalıcı olarak silindi: {name}\n", style=C_OK))
+    else:
+        _console.print(Text("  ✗ Silinemedi.\n", style=C_ERR))
 
 
 # ---------------------------------------------------------------------------
@@ -622,6 +687,18 @@ def _dispatch(state: ReplState, raw: str) -> bool:
 
     elif cmd in ("new", "yeni"):
         state.new_session()
+
+    elif cmd in ("delete", "sil"):
+        _cmd_delete(arg)
+
+    elif cmd in ("trash", "çöp", "cop"):
+        _cmd_trash()
+
+    elif cmd in ("restore", "geri"):
+        _cmd_restore(arg)
+
+    elif cmd in ("purge", "temizle_cop", "temizlecop"):
+        _cmd_purge(arg)
 
     else:
         # Not a recognized slash command — treat whole thing as a task/chat

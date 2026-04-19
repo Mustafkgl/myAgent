@@ -24,7 +24,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
@@ -778,12 +778,21 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         return HTML(f'<ansibrightblack>◆ {model}  ? kısayollar  /help komutlar</ansibrightblack>')
 
     def _prompt_message():
+        from prompt_toolkit.application import get_app
+        from prompt_toolkit.formatted_text import FormattedText
         try:
-            width = os.get_terminal_size().columns
-        except OSError:
-            width = 80
-        rule = "─" * width
-        return HTML(f'<ansibrightblack>{rule}</ansibrightblack>\n<ansipurple><b>❯</b></ansipurple> ')
+            width = get_app().output.get_size().columns
+        except Exception:
+            try:
+                width = os.get_terminal_size().columns
+            except OSError:
+                width = 80
+        return FormattedText([
+            ("fg:ansibrightblack", "─" * width),
+            ("", "\n"),
+            ("fg:ansipurple bold", "❯"),
+            ("", " "),
+        ])
 
     prompt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_path)),

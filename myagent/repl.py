@@ -22,8 +22,11 @@ from typing import TYPE_CHECKING
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.document import Document
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.rule import Rule
@@ -193,15 +196,11 @@ def _print_banner(state: ReplState | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 def _cmd_help() -> None:
-    t = Text("\n  Komutlar\n\n", style=f"bold {C_CLAUDE}")
+    t = Text("\n  Slash Komutları\n\n", style=f"bold {C_CLAUDE}")
     for cmd, desc in _COMMANDS:
         t.append(f"  {cmd:<16}", style="bold white")
         t.append(f"  {desc}\n", style="dim")
-    t.append(
-        "\n  ↑↓ geçmiş  ·  Tab otomatik tamamla  ·  "
-        "Ctrl+Y son cevabı kopyala  ·  Ctrl+L temizle\n\n",
-        style="dim",
-    )
+    t.append("\n  Kısayollar için  ?  yazın.\n\n", style="dim")
     _console.print(t)
 
 
@@ -639,12 +638,123 @@ def _rule() -> None:
     _console.print("─" * _term_width(), style="dim")
 
 
-def _bottom_toolbar():
-    from myagent.config.auth import get_claude_model
-    model = get_claude_model()
-    return HTML(f' <b>?</b> for shortcuts'
-                f'                                        '
-                f'◐ {model}')
+def _bottom_toolbar(state: "ReplState"):
+    from myagent.config.auth import get_claude_model, get_gemini_model
+    left  = " <b>?</b> for shortcuts"
+    right = f"◐ {get_claude_model()} · ✦ {get_gemini_model()} "
+    # strip HTML tags for width calculation
+    left_plain  = "? for shortcuts"
+    right_plain = f"◐ {get_claude_model()} · ✦ {get_gemini_model()} "
+    width = _term_width()
+    pad = max(1, width - len(left_plain) - len(right_plain) - 1)
+    return HTML(f"{left}{' ' * pad}<b>{right}</b>")
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["pbcopy"], input=text.encode(), check=True, timeout=5)
+            return True
+        for cmd in (
+            ["wl-copy"],
+            ["xclip", "-selection", "clipboard"],
+            ["xsel", "--clipboard", "--input"],
+        ):
+            try:
+                subprocess.run(cmd, input=text.encode(), check=True, timeout=5)
+                return True
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                continue
+    except Exception:
+        pass
+    return False
+
+
+def _show_shortcuts() -> None:
+    rows = [
+        ("Ctrl+C",      "İptal / Çıkış onayı"),
+        ("Ctrl+D",      "Çıkış"),
+        ("Ctrl+L",      "Ekranı temizle"),
+        ("Ctrl+R",      "Geçmişte ara (reverse search)"),
+        ("Ctrl+O",      "Editörde çok satırlı giriş ($EDITOR)"),
+        ("Ctrl+Y",      "Son cevabı panoya kopyala"),
+        ("Ctrl+N",      "Yeni oturum başlat"),
+        ("Ctrl+A",      "Satır başına git"),
+        ("Ctrl+E",      "Satır sonuna git"),
+        ("Ctrl+K",      "Satır sonunu sil"),
+        ("Ctrl+U",      "Satır başını sil"),
+        ("Ctrl+W",      "Önceki kelimeyi sil"),
+        ("↑ / ↓",       "Geçmiş - sonraki / önceki"),
+        ("Tab",         "Slash komut otomatik tamamlama"),
+        ("?",           "Bu yardımı göster"),
+        ("! <komut>",   "Shell komutu çalıştır  (! ls, ! git status ...)"),
+    ]
+    t = Text("\n  Kısayollar\n\n", style="bold #c084fc")
+    for key, desc in rows:
+        t.append(f"  {key:<22}", style="bold white")
+        t.append(f"  {desc}\n", style="dim")
+    t.append("\n  Slash komutları için  /help  yazın.\n\n", style="dim")
+    _console.print(t)
+
+
+def _run_shell(cmd: str) -> None:
+    _console.print(Text(f"\n  $ {cmd}\n", style="dim"))
+    try:
+        result = subprocess.run(
+            cmd, shell=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=30,
+        )
+        if result.stdout:
+            _console.print(result.stdout.rstrip())
+    except subprocess.TimeoutExpired:
+        _console.print(Text("  (zaman aşımı)\n", style=C_WARN))
+    except Exception as exc:
+        _console.print(Text(f"  Hata: {exc}\n", style=C_ERR))
+    _console.print()
+
+
+def _build_key_bindings(state: "ReplState") -> KeyBindings:
+    kb = KeyBindings()
+
+    @kb.add("c-l")
+    def _(event):
+        event.app.renderer.clear()
+        _console.clear()
+        _print_banner(state)
+
+    @kb.add("c-y")
+    def _(event):
+        if state.last_answer:
+            ok = _copy_to_clipboard(state.last_answer)
+            msg = "  ✓ Panoya kopyalandı\n" if ok else "  ✗ Pano aracı bulunamadı (xclip/wl-copy)\n"
+            _console.print(Text(msg, style=C_OK if ok else C_WARN))
+        else:
+            _console.print(Text("  (henüz cevap yok)\n", style=C_DIM))
+
+    @kb.add("c-n")
+    def _(event):
+        state.new_session()
+
+    @kb.add("c-o")
+    def _(event):
+        buf = event.app.current_buffer
+        current = buf.text
+        editor = os.environ.get("EDITOR", "nano")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write(current)
+            tmp = f.name
+        try:
+            with event.app.input.detach():
+                subprocess.run([editor, tmp], check=False)
+            text = Path(tmp).read_text(encoding="utf-8").strip()
+            buf.set_document(Document(text, len(text)))
+        except Exception as exc:
+            _console.print(Text(f"  Editör hatası: {exc}\n", style=C_ERR))
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+
+    return kb
 
 
 def start_repl(session: "SessionState", verbose: bool = False) -> None:
@@ -653,12 +763,17 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
     history_path = Path.home() / ".myagent" / "repl_history"
     history_path.parent.mkdir(parents=True, exist_ok=True)
 
+    kb = _build_key_bindings(state)
+
     prompt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_path)),
         completer=_SlashCompleter(),
         complete_while_typing=True,
         complete_in_thread=True,
-        bottom_toolbar=_bottom_toolbar,
+        bottom_toolbar=lambda: _bottom_toolbar(state),
+        key_bindings=kb,
+        enable_history_search=True,
+        multiline=False,
     )
 
     _print_banner(state)
@@ -675,17 +790,27 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         except KeyboardInterrupt:
             if quit_confirm:
                 state.autosave()
-                _console.print("\nGoodbye.")
+                _console.print(Text("\nGoodbye.\n", style="dim"))
                 break
             quit_confirm = True
-            _console.print(Text("  Çıkmak için tekrar Ctrl+C yapın.", style="dim yellow"))
+            _console.print(Text("  Çıkmak için tekrar Ctrl+C yapın.\n", style="dim yellow"))
             continue
         except EOFError:
             state.autosave()
-            _console.print("\nGoodbye.")
+            _console.print(Text("\nGoodbye.\n", style="dim"))
             break
 
         if not raw:
+            continue
+
+        # ? alone → shortcuts
+        if raw == "?":
+            _show_shortcuts()
+            continue
+
+        # ! prefix → shell command
+        if raw.startswith("!"):
+            _run_shell(raw[1:].strip())
             continue
 
         if not _dispatch(state, raw):

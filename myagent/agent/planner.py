@@ -111,6 +111,64 @@ def _extract_symbols(path: Path) -> list[str]:
     return symbols
 
 
+import subprocess
+
+def _ripgrep(pattern: str, include_pattern: str = None) -> str:
+    """Fast search using ripgrep (rg)."""
+    cmd = ["rg", "--max-count", "20", "--line-number", "--column", "--color", "never", pattern]
+    if include_pattern:
+        cmd.extend(["-g", include_pattern])
+    
+    try:
+        result = subprocess.run(cmd, cwd=WORK_DIR, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            return result.stdout
+        return f"Sonuç bulunamadı: {pattern}"
+    except FileNotFoundError:
+        return "Hata: 'rg' (ripgrep) sistemde yüklü değil."
+    except Exception as e:
+        return f"Arama hatası: {str(e)}"
+
+def _read_file_content(path_str: str) -> str:
+    """Read full content of a file for Claude's deep understanding."""
+    try:
+        path = WORK_DIR / path_str
+        if path.exists() and path.is_file():
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            # Limit to 8KB to save tokens but provide depth
+            if len(content) > 8192:
+                return content[:8192] + "\n... (truncated)"
+            return content
+        return f"Hata: Dosya bulunamadı: {path_str}"
+    except Exception as e:
+        return f"Okuma hatası: {str(e)}"
+
+# ---------------------------------------------------------------------------
+# Research Phase Loop (The "Thinking" before "Planning")
+# ---------------------------------------------------------------------------
+
+def _run_research(task: str, stream_callback=None) -> str:
+    """Initial research phase where Claude can ask for file content or searches."""
+    # This phase allows Claude to be proactive. 
+    # For now, we enhance the context by automatically searching for key terms in the task.
+    keywords = re.findall(r"\b\w{4,}\b", task) # Get significant words
+    research_results = []
+    
+    if stream_callback:
+        stream_callback("\n[research] Proje taranıyor...\n")
+
+    # Limit research to top 3 keywords to keep it fast
+    for kw in keywords[:3]:
+        if kw.lower() in ("create", "make", "build", "change", "update", "delete", "with", "from", "import"):
+            continue
+        res = _ripgrep(kw)
+        if "Sonuç bulunamadı" not in res:
+            # Sadece ilk 5 eşleşmeyi alarak token tasarrufu yap
+            lines = res.splitlines()[:5]
+            research_results.append(f"Search (top 5) for '{kw}':\n" + "\n".join(lines))
+            
+    return "\n\n".join(research_results)
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -136,7 +194,11 @@ def plan(
         print(f"  [planner] mode={mode}  model={get_claude_model()}", flush=True)
 
     context = _build_context()
+    research = _run_research(task, stream_callback=stream_callback)
+    
     parts = [task]
+    if research:
+        parts.append(f"Research Findings (Deep Scan):\n{research}")
     if context:
         parts.append(context)
     if session_context:

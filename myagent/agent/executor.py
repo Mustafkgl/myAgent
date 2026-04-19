@@ -55,7 +55,8 @@ class ExecutionResult:
 # ---------------------------------------------------------------------------
 
 _FILE_KEYWORDS = ("FILE:", "DOSYA:", "ФАЙЛ:")   # EN / TR / RU variants Gemini uses
-_BASH_KEYWORDS = ("BASH:", "KOMUT:", "КОМАНДА:")
+_BASH_KEYWORDS = ("BASH:", "KOMUT:", "КОМАНDA:")
+_OBS_KEYWORDS  = ("OBSERVATION:", "GÖZLEM:", "НАБЛЮДЕНИЕ:")
 
 
 def _strip_prefix(line: str, keywords: tuple[str, ...]) -> str | None:
@@ -85,6 +86,15 @@ def parse_and_execute(worker_output: str) -> ExecutionResult:
         if content.startswith("\n"):
             content = content[1:]
         return _write_file(filename, content)
+
+    observation = _strip_prefix(first, _OBS_KEYWORDS)
+    if observation is not None:
+        return ExecutionResult(
+            ok=True,
+            kind="observation",
+            message=observation,
+            details={"observation": observation}
+        )
 
     command = _strip_prefix(first, _BASH_KEYWORDS)
     if command is not None:

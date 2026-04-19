@@ -22,10 +22,17 @@ BASH: <command>
 
 Allowed BASH commands: mkdir, touch, echo, cat
 
+For an observation or strategic update request:
+
+OBSERVATION: <specific findings or issue description>
+===END===
+
+Use OBSERVATION only if a step is blocked by a discovery (e.g., a file exists at a different path than planned, or a library is missing and `pip install` didn't work). This allows the Planner (Claude) to adjust the strategy mid-run.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ABSOLUTE RULES — no exceptions
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. EXACTLY one block per step. N steps → N blocks. Not fewer. Not more.
+1. EXACTLY one block per step (or an OBSERVATION if a step is impossible). N steps → N blocks.
 2. EVERY block MUST end with ===END=== on its own line.
 3. Do NOT combine two steps into one block. Ever.
 4. Do NOT skip a step. Every step gets its own block.

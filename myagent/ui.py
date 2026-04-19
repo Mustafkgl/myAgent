@@ -187,7 +187,6 @@ class AgentUI:
         self.console.print(f"  [{C_DIM}]({e})[/]{tc}")
 
     # ── Planning ─────────────────────────────────────────────────────────────
-
     def plan_done(self, steps: list[str]) -> None:
         t = Table.grid(padding=(0, 2))
         t.add_column(style=C_DIM, justify="right")
@@ -198,8 +197,12 @@ class AgentUI:
             t,
             title=f"[{C_CLAUDE}]Plan — {len(steps)} adım[/]",
             border_style=C_CLAUDE,
-            padding=(0, 1),
         ))
+
+    def ask_approval(self) -> bool:
+        """Ask for user confirmation before executing the plan."""
+        from rich.prompt import Confirm
+        return Confirm.ask(f"\n  [{C_CLAUDE}]Plana devam edilsin mi?[/]", default=True)
 
     # ── Execution ────────────────────────────────────────────────────────────
 

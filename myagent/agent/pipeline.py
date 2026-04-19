@@ -172,6 +172,15 @@ def run(
         ps.phase = "planned"
         _save_ps(ps)
 
+    # ── 2a. Human-in-the-loop Approval ──────────────────────────────────────
+    if not dry_run and not resume_state:
+        approved = ui.ask_approval()
+        if not approved:
+            result.summary_en = "Plan was rejected by the user."
+            result.summary_tr = "Plan kullanıcı tarafından reddedildi."
+            result.success = False
+            return result
+
     if dry_run:
         result.summary_en = f"Dry run: {len(steps)} steps planned (not executed)."
         result.summary_tr = en_to_tr(result.summary_en)
@@ -364,6 +373,25 @@ def _execute(
                 worker_output=worker_out, result=exec_result,
             ))
             lines_en.append(f"Step {i}: {exec_result.message}")
+            
+            # ── Autonomous Loop: Handle Observation ─────────────────────────
+            if exec_result.kind == "observation":
+                obs_text = exec_result.details.get("observation", "")
+                ui.raw("Gözlem", obs_text, color="yellow3")
+                
+                with ui.streaming("Claude stratejiyi güncelliyor…", color="medium_purple1") as write:
+                    # Claude'a sadece gözlemi ve kalan adımları göndererek token tasarrufu yapıyoruz
+                    remaining_steps = steps[i:]
+                    new_steps, _ = plan(
+                        f"Gözlem: {obs_text}\nKalan Adımlar: {remaining_steps}\nLütfen stratejiyi uyarla.",
+                        verbose=False, stream_callback=write
+                    )
+                
+                if new_steps:
+                    ui.plan_done(new_steps)
+                    # Kalan adımları yeni adımlarla değiştir ve devam et
+                    return _execute(new_steps, task, batch, verbose, result, ui)
+
             if exec_result.kind == "file" and "filename" in exec_result.details:
                 seen_files[exec_result.details["filename"]] = True
             if not exec_result.ok:

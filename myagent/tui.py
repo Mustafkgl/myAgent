@@ -24,7 +24,21 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.events import Key
-from textual.widgets import Footer, Header, Input, Label, OptionList, Static
+from textual.widgets import (
+    Button,
+    Checkbox,
+    DirectoryTree,
+    Footer,
+    Header,
+    Input,
+    Label,
+    OptionList,
+    Select,
+    Static,
+    TextArea,
+)
+from textual.screen import ModalScreen
+from textual.containers import Grid, Horizontal, VerticalScroll
 from textual.widgets.option_list import Option
 
 from myagent.agent.chat import Chat
@@ -54,6 +68,135 @@ def _sessions_save(sid: str, name: str, messages: list[dict]) -> None:
 
 def _sessions_list() -> list[dict]:
     return _sessions_list_new()
+
+
+class SettingsModal(ModalScreen):
+    """A modal for updating agent configuration on the fly."""
+    CSS = """
+    SettingsModal {
+        align: center middle;
+    }
+
+    #settings-container {
+        width: 60;
+        height: 35;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    .setting-row {
+        height: 3;
+        margin-bottom: 1;
+    }
+
+    .setting-row Label {
+        width: 20;
+        padding-top: 1;
+    }
+    
+    #modal-title {
+        text-align: center;
+        text-style: bold;
+        width: 100%;
+        margin-bottom: 1;
+        color: $primary;
+    }
+
+    #button-row {
+        align: center middle;
+        margin-top: 2;
+        height: 3;
+    }
+
+    Button {
+        margin: 0 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        from myagent.config.auth import (
+            get_claude_model, get_gemini_model,
+            CLAUDE_MODELS, GEMINI_MODELS
+        )
+        yield Grid(
+            Label("🔧 AYARLAR", id="modal-title"),
+            Horizontal(
+                Label("Claude Modeli:"),
+                Select([(m, m) for m in CLAUDE_MODELS], value=get_claude_model(), id="claude-model"),
+                classes="setting-row"
+            ),
+            Horizontal(
+                Label("Gemini Modeli:"),
+                Select([(m, m) for m in GEMINI_MODELS], value=get_gemini_model(), id="gemini-model"),
+                classes="setting-row"
+            ),
+            Horizontal(
+                Label("Otomatik Onay:"),
+                Checkbox(value=False, id="auto-approve"),
+                classes="setting-row"
+            ),
+            Horizontal(
+                Label("Dry Run Modu:"),
+                Checkbox(value=False, id="dry-run"),
+                classes="setting-row"
+            ),
+            Horizontal(
+                Button("Kaydet", variant="success", id="save-settings"),
+                Button("İptal", variant="error", id="cancel-settings"),
+                id="button-row"
+            ),
+            id="settings-container"
+        )
+
+    @on(Button.Pressed, "#save-settings")
+    def save(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#cancel-settings")
+    def cancel(self) -> None:
+        self.dismiss(False)
+
+
+class CopyModal(ModalScreen):
+    """A modal that displays the session text in a selectable TextArea."""
+    def __init__(self, content: str):
+        super().__init__()
+        self.content = content
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="copy-container"):
+            yield Label("📄 KELİME SEÇİM MODU (Esc: Çıkış / Mouse ile seç & kopyala)", id="copy-title")
+            yield TextArea(self.content, read_only=True, id="copy-area")
+            yield Footer()
+
+    CSS = """
+    CopyModal { align: center middle; }
+    #copy-container {
+        width: 90%;
+        height: 90%;
+        border: thick $primary;
+        background: $surface;
+        padding: 1;
+    }
+    #copy-title {
+        text-align: center;
+        text-style: bold;
+        background: $primary;
+        color: white;
+        margin-bottom: 1;
+        width: 100%;
+    }
+    #copy-area {
+        height: 1fr;
+        border: none;
+    }
+    """
+    
+    def on_mount(self) -> None:
+        self.query_one("#copy-area").focus()
+
+    BINDINGS = [("escape", "dismiss", "Geri")]
 
 
 # ---------------------------------------------------------------------------
@@ -94,22 +237,41 @@ class TuiAgentUI(AgentUI):
     def __init__(self, app: "MyAgentApp"):
         super().__init__(verbose=app.verbose)
         self.app = app
+        self._current_step_idx = 0
 
     def _log(self, renderable: Any) -> None:
         self.app.call_from_thread(self.app.log_message, renderable)
 
+    def _update_sidebar(self, widget_id: str, content: Any) -> None:
+        def update():
+            try:
+                w = self.app.query_one(f"#{widget_id}", Static)
+                w.update(content)
+            except Exception:
+                pass
+        self.app.call_from_thread(update)
+
     def header(self, task: str, claude_model: str, gemini_model: str) -> None:
         self._log(Rule(f"[{C_CLAUDE}]{task}[/]", style=C_DIM))
+        self._update_sidebar("pipeline-status", Text(f"🚀 Görev Başlatıldı\n{task[:30]}...", style="bold green"))
+        self._update_sidebar("pipeline-steps", "")
+        self._update_sidebar("pipeline-logs", "")
 
     def plan_done(self, steps: list[str]) -> None:
         t = Text(f"\n  Plan ({len(steps)} adım):\n", style=C_CLAUDE)
+        sidebar_t = Text("📋 Planlanan Adımlar:\n", style="bold #c084fc")
+        
         for i, s in enumerate(steps, 1):
             t.append(f"    {i}. ", style=C_DIM)
             t.append(f"{s}\n")
+            sidebar_t.append(f"  {i}. ", style="dim")
+            sidebar_t.append(f"{s[:35]}...\n", style="white")
+            
         self._log(t)
+        self._update_sidebar("pipeline-steps", sidebar_t)
 
     def exec_results(self, steps: list[str], results: list[Any]) -> None:
-        t = Text("\n  Yürütme:\n", style=C_GEMINI)
+        t = Text("\n  Yürütme Sonuçları:\n", style=C_GEMINI)
         for i, (step, r) in enumerate(zip(steps, results), 1):
             icon = "✓" if r.ok else "✗"
             color = C_OK if r.ok else C_ERR
@@ -129,13 +291,65 @@ class TuiAgentUI(AgentUI):
         status = "✓ Tamamlandı" if success else "✗ Hatalarla tamamlandı"
         color = C_OK if success else C_WARN
         self._log(Text(f"\n  {status}\n", style=f"bold {color}"))
+        self._update_sidebar("pipeline-status", Text(f"{status}", style=f"bold {color}"))
+
+    def ask_approval(self) -> bool:
+        """Wait for user confirmation in TUI."""
+        self._log(Text("\n  Onay Bekleniyor: Plana devam edilsin mi? (e/h)", style="bold #c084fc"))
+        self._update_sidebar("pipeline-status", Text("🤔 Onay Bekleniyor...", style="bold #c084fc"))
+        
+        # Pipeline senkron bir worker thread'de çalıştığı için 
+        # TUI ana thread'inden gelen cevabı beklemek için bir Event kullanıyoruz.
+        self.app._approval_event = asyncio.Event()
+        self.app._approval_result = False
+        
+        # TUI ana thread'inde input'u odağa al ve placeholder'ı değiştir
+        def prepare_input():
+            try:
+                inp = self.app.query_one("#user-input", PromptInput)
+                inp.placeholder = "Devam edilsin mi? (e/h)"
+                inp.focus()
+            except Exception:
+                pass
+        self.app.call_from_thread(prepare_input)
+
+        # Event set edilene kadar bu worker thread'i blokla
+        loop = self.app.call_from_thread(asyncio.get_running_loop)
+        future = asyncio.run_coroutine_threadsafe(self.app._approval_event.wait(), loop)
+        future.result() # Bloklar!
+
+        def reset_input():
+            try:
+                inp = self.app.query_one("#user-input", PromptInput)
+                inp.placeholder = "Ne yapmamı istersin?"
+                inp.value = ""
+            except Exception:
+                pass
+        self.app.call_from_thread(reset_input)
+
+        return self.app._approval_result
 
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
-        yield lambda x: None
+        self._update_sidebar("pipeline-status", Text(f"⏳ {label}", style=f"bold {color}"))
+        
+        def write(chunk: str):
+            def _append():
+                try:
+                    w = self.app.query_one("#pipeline-logs", Static)
+                    current = str(w.renderable)
+                    # Sadece son 10 satırı tut ki sidebar şişmesin
+                    lines = (current + chunk).split("\n")[-10:]
+                    w.update(Text("\n".join(lines), style="grey50"))
+                except Exception:
+                    pass
+            self.app.call_from_thread(_append)
+
+        yield write
 
     @contextmanager
     def spinner(self, label: str, color: str = C_DIM):
+        self._update_sidebar("pipeline-status", Text(f"⚙️ {label}", style=f"bold {color}"))
         yield
 
 
@@ -157,17 +371,71 @@ _BANNER = """\
                   ░░░░░░                  ░░░░░░"""
 
 
+from textual.binding import Binding
+
+class PromptInput(Input):
+    """Custom Input that doesn't clutter the footer and respects app-level shortcuts."""
+    BINDINGS = [
+        Binding("ctrl+e", "app.toggle_sidebar", "İşlemler"),
+        Binding("ctrl+k", "app.copy_mode", "Seçim"),
+        Binding("left", "cursor_left", "Left", show=False),
+        Binding("right", "cursor_right", "Right", show=False),
+        Binding("home", "home", "Home", show=False),
+        Binding("end", "end", "End", show=False),
+        Binding("delete", "delete_forward", "Delete", show=False),
+        Binding("backspace", "delete_left", "Backspace", show=False),
+        Binding("ctrl+a", "home", "Home", show=False),
+    ]
+
+
 class MyAgentApp(App):
     TITLE = "myAgent"
     CSS = """
     Screen { background: $surface; }
 
-    #chat-log {
+    #main-container {
         height: 1fr;
+    }
+
+    #file-tree {
+        width: 20%;
+        min-width: 25;
+        max-width: 40;
+        background: $panel;
+        border-right: solid $primary;
+        scrollbar-size-vertical: 0;
+    }
+
+    #chat-log {
+        width: 1fr;
+        min-width: 40;
         padding: 0 2;
         scrollbar-size-vertical: 0;
         scrollbar-size-horizontal: 0;
     }
+
+    #pipeline-sidebar {
+        width: 25%;
+        min-width: 30;
+        max-width: 50;
+        background: $panel;
+        border-left: solid $primary;
+        padding: 1 2;
+        scrollbar-size-vertical: 0;
+    }
+
+    #sidebar-title {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        background: $primary;
+        color: white;
+        margin-bottom: 1;
+    }
+
+    #pipeline-status { margin-bottom: 1; min-height: 2; }
+    #pipeline-steps { margin-bottom: 1; }
+    #pipeline-logs { color: $text-disabled; }
 
     #chat-log > Static { width: 100%; }
 
@@ -189,13 +457,26 @@ class MyAgentApp(App):
 
     Input { border: none; background: $surface; }
     .input-prompt { color: $primary; text-style: bold; width: 4; }
+
+    Footer {
+        background: $surface;
+        color: $text;
+    }
+    Footer > .footer--highlight {
+        background: $primary;
+        color: white;
+    }
     """
 
     BINDINGS = [
-        ("ctrl+c",  "quit",       "Çıkış"),
-        ("ctrl+l",  "clear_log",  "Temizle"),
-        ("ctrl+y",  "copy_last",  "Kopyala"),
-        ("f1",      "help",       "Yardım"),
+        ("ctrl+c",  "quit",           "Çıkış"),
+        ("ctrl+b",  "toggle_tree",    "Dosyalar"),
+        ("ctrl+e",  "toggle_sidebar", "İşlemler"),
+        ("ctrl+k",  "copy_mode",      "Seçim"),
+        ("ctrl+s",  "open_settings",  "Ayarlar"),
+        ("ctrl+l",  "clear_log",      "Temizle"),
+        ("ctrl+y",  "copy_last",      "Kopyala"),
+        ("f1",      "help",           "Yardım"),
     ]
 
     def __init__(self, session_state: "SessionState", verbose: bool = False):
@@ -213,20 +494,68 @@ class MyAgentApp(App):
         if not self.session.chat:
             self.session.chat = Chat()
         self.ui_bridge = TuiAgentUI(self)
+        self._approval_event: asyncio.Event | None = None
+        self._approval_result: bool = False
 
     # ── Layout ───────────────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield VerticalScroll(id="chat-log")
+        with Horizontal(id="main-container"):
+            yield DirectoryTree("./", id="file-tree")
+            yield VerticalScroll(id="chat-log")
+            with VerticalScroll(id="pipeline-sidebar"):
+                yield Label("İşlem Takibi", id="sidebar-title")
+                yield Static("", id="pipeline-status")
+                yield Static("", id="pipeline-steps")
+                yield Static("", id="pipeline-logs")
         yield OptionList(id="autocomplete")
         with Horizontal(id="input-container"):
             yield Label(" ❯ ", classes="input-prompt")
-            yield Input(placeholder="Ne yapmamı istersin?", id="user-input")
+            yield PromptInput(placeholder="Ne yapmamı istersin?", id="user-input")
         yield Footer()
+
+    def action_toggle_tree(self) -> None:
+        """Toggle the file tree sidebar."""
+        tree = self.query_one("#file-tree")
+        tree.display = not tree.display
+
+    def action_toggle_sidebar(self) -> None:
+        """Toggle the pipeline sidebar."""
+        sidebar = self.query_one("#pipeline-sidebar")
+        sidebar.display = not sidebar.display
+
+    def on_resize(self) -> None:
+        """Handle terminal resize for responsiveness."""
+        if self.size.width < 100:
+            tree = self.query_one("#file-tree")
+            if tree.display:
+                tree.display = False
+                self.log_message(Text("  ℹ Ekran daraldı, dosya ağacı gizlendi (Ctrl+B ile açılabilir).", style="dim"))
+
+    def action_open_settings(self) -> None:
+        """Open the settings modal."""
+        self.push_screen(SettingsModal(), self._on_settings_closed)
+
+    def action_copy_mode(self) -> None:
+        """Open the copy modal with all chat history."""
+        full_text = ""
+        for msg in self._msgs:
+            role = "SİZ" if msg["role"] == "user" else "CLAUDE"
+            full_text += f"=== {role} ===\n{msg['text']}\n\n"
+        
+        if not full_text:
+            self.notify("Henüz geçmiş yok.", severity="warning"); return
+            
+        self.push_screen(CopyModal(full_text))
+
+    def _on_settings_closed(self, saved: bool) -> None:
+        if saved:
+            self.log_message(Text("  ✅ Ayarlar güncellendi.", style="green"))
 
     def on_mount(self) -> None:
         self.chat_log = self.query_one("#chat-log", VerticalScroll)
+        self.sidebar = self.query_one("#pipeline-sidebar", VerticalScroll)
         from myagent.config.auth import get_claude_model, get_gemini_model
         self.log_message(Text(_BANNER, style="bold #c084fc"))
         self.log_message(Text.assemble(
@@ -246,7 +575,7 @@ class MyAgentApp(App):
             ("\n", ""),
         ))
         self.log_message(Text(
-            "  ↑↓ geçmiş · Tab otomatik tamamla · Ctrl+Y kopyala · Ctrl+L temizle · F1 yardım\n",
+            "  ↑↓ geçmiş · Tab otomatik tamamla · Ctrl+Y kopyala · Ctrl+K seçim · Ctrl+L temizle · F1 yardım\n",
             style="dim",
         ))
         self.query_one("#user-input").focus()
@@ -287,7 +616,7 @@ class MyAgentApp(App):
         self._complete_autocomplete(event.option.id)
 
     def _complete_autocomplete(self, cmd: str) -> None:
-        inp = self.query_one("#user-input", Input)
+        inp = self.query_one("#user-input", PromptInput)
         ac  = self.query_one("#autocomplete", OptionList)
         inp.value = cmd + " "
         inp.cursor_position = len(inp.value)
@@ -298,7 +627,7 @@ class MyAgentApp(App):
 
     def on_key(self, event: Key) -> None:
         try:
-            inp = self.query_one("#user-input", Input)
+            inp = self.query_one("#user-input", PromptInput)
             ac  = self.query_one("#autocomplete", OptionList)
         except Exception:
             return  # AuthScreen veya başka bir ekran aktif, müdahale etme
@@ -375,6 +704,14 @@ class MyAgentApp(App):
         text = event.value.strip()
         if not text:
             return
+
+        # Onay bekleyen bir durum varsa (Human-in-the-loop)
+        if self._approval_event and not self._approval_event.is_set():
+            event.input.value = ""
+            self._approval_result = text.lower() in ("e", "y", "evet", "yes", "ok", "")
+            self._approval_event.set()
+            return
+
         event.input.value = ""
         self._hist_pos = -1
         self._hist_draft = ""
@@ -497,7 +834,7 @@ class MyAgentApp(App):
             ("  ID:         ", "dim"), (self._sid[:8], "dim"), ("\n", ""),
             ("  Mesajlar:   ", "dim"), (f"{n_user} soru / {n_asst} cevap\n", "white"),
             ("  Verbose:    ", "dim"), ("açık\n" if self.verbose else "kapalı\n", "white"),
-            ("  Tema:       ", "dim"), ("dark\n" if self.dark else "light\n", "white"),
+            ("  Tema:       ", "dim"), (f"{self.theme}\n", "white"),
         )
         self.log_message(base)
 
@@ -644,13 +981,14 @@ class MyAgentApp(App):
 
     def _cmd_theme(self, arg: str) -> None:
         if arg == "light":
-            self.dark = False
+            self.theme = "textual-light"
         elif arg == "dark":
-            self.dark = True
+            self.theme = "textual-dark"
         else:
-            self.dark = not self.dark
+            self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
+        
         self.log_message(Text(
-            f"  ✓ Tema: {'dark' if self.dark else 'light'}\n", style=C_OK
+            f"  ✓ Tema: {self.theme}\n", style=C_OK
         ))
 
     def _cmd_export(self) -> None:
@@ -697,7 +1035,7 @@ class MyAgentApp(App):
         finally:
             Path(tmp).unlink(missing_ok=True)
         if text:
-            inp = self.query_one("#user-input", Input)
+            inp = self.query_one("#user-input", PromptInput)
             inp.value = text
             inp.cursor_position = len(text)
 
@@ -850,6 +1188,12 @@ class MyAgentApp(App):
             self.session.chat = Chat()
         self.session.chat.load_history(self._msgs)
 
+        # Son cevabı kopyalanabilir hale getir
+        for msg in reversed(self._msgs):
+            if msg["role"] == "assistant":
+                self._last_answer = msg["text"]
+                break
+
         for msg in self._msgs:
             if msg["role"] == "user":
                 self.log_message(Text.assemble(
@@ -973,6 +1317,10 @@ class MyAgentApp(App):
             "`↑` `↓` geçmiş  ·  "
             "`PgUp` `PgDn` scroll  ·  "
             "`Tab` otomatik tamamla  ·  "
+            "`Ctrl+B` dosyalar  ·  "
+            "`Ctrl+E` işlemler  ·  "
+            "`Ctrl+K` seçim  ·  "
+            "`Ctrl+S` ayarlar  ·  "
             "`Ctrl+Y` kopyala  ·  "
             "`Ctrl+L` temizle  ·  "
             "`F1` yardım\n"

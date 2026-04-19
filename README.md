@@ -3,402 +3,152 @@
 
 <img src="banner.png" alt="myAgent" width="672"/>
 
-### Claude düşünür — Gemini çalışır — Sen sadece ne istediğini söylersin
+### Claude Düşünür — Gemini Çalışır — Siz Sadece Hedeflersiniz
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![Claude](https://img.shields.io/badge/Planner-Claude-c084fc?style=flat-square)
-![Gemini](https://img.shields.io/badge/Worker-Gemini-4285F4?style=flat-square)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-6D28D9?style=flat-square)
+![Claude](https://img.shields.io/badge/Brain-Claude%203.5-c084fc?style=flat-square)
+![Gemini](https://img.shields.io/badge/Hands-Gemini%202.0-4285F4?style=flat-square)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-6D28D9?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
 </div>
 
 ---
 
-## Fikir
+## 💡 Felsefe: Bilinçli Asimetri
 
-Çoğu AI ajanı aynı modeli tekrar tekrar çağırır. myAgent farklı bir yaklaşım benimser: **bilinçli asimetri.**
+Piyasadaki AI ajanlarının çoğu "pahalı" modelleri her basit dosya okuma işlemi için kullanarak bütçenizi ve limitlerinizi hızla tüketir. **myAgent** farklıdır:
 
-> Pahalı modeli sadece beyne ver. Bedava modeli kola.
+> **Stratejik Zekayı** (Planlama ve İnceleme) Claude'a verir, **Kas Gücünü** (Kod Yazma ve Terminal Yürütme) Gemini'ye bırakır.
 
-Claude Code ile aynı işi yaparken token harcamanın onda birine çalışırsın — Claude yalnızca planlar ve inceler, Gemini tüm ağır işi ücretsiz olarak yürütür.
-
----
-
-## Arayüz
-
-<div align="center">
-<img src="docs/screenshot_startup.png" alt="myAgent başlangıç ekranı" width="720"/>
-</div>
-
-<br/>
-
-<div align="center">
-<img src="docs/demo_autocomplete.gif" alt="Slash komut otomatik tamamlama" width="560"/>
-<br/><em>/ yazınca komut önerileri anında gelir</em>
-</div>
+Bu sayede Claude Code ile aynı projeyi ayağa kaldırırken **token maliyetinden %90'a kadar tasarruf** edersiniz.
 
 ---
 
-## Mimari
+## 🖥️ Yeni Nesil TUI (Terminal Kullanıcı Arayüzü)
+
+`tui_features` dalı ile gelen yenilikler, myAgent'ı bir komut satırı aracından tam teşekküllü bir **AI-IDE** deneyimine dönüştürdü:
+
+- **Canlı Takip Paneli (Ctrl+E):** Sağ panelde Claude'un stratejik adımlarını ve Gemini'nin canlı loglarını anlık izleyin.
+- **Entegre Dosya Gezgini (Ctrl+B):** Sol panelde proje yapısını görün, dizinler arasında gezinin.
+- **Kelime Seçim Modu (Ctrl+K):** Terminalin kısıtlamalarından kurtulun; tüm geçmişi seçilebilir, cerrahi hassasiyette kopyalanabilir bir alanda yönetin.
+- **Anlık Ayarlar (Ctrl+S):** Uygulamadan çıkmadan modelleri değiştirin, API anahtarlarını güncelleyin.
+- **Human-in-the-Loop:** Claude planı bitirdiğinde onayınızı bekler. Siz "Yürü" diyene kadar hiçbir dosya değişmez.
+
+<div align="center">
+<img src="docs/screenshot_startup.png" alt="myAgent Modern TUI" width="800"/>
+<br/><em>Yeni nesil üç panelli responsive arayüz</em>
+</div>
+
+---
+
+## 🧠 Otonom Güç: Aşama 6 Döngüsü
+
+myAgent artık sadece kod yazmıyor, projenizi bir mühendis gibi "araştırıyor" ve "hata yapınca durup düşünüyor":
+
+1.  **Derin Arama (Deep Search):** `ripgrep` entegrasyonu sayesinde Claude, plan yapmadan önce tüm projeyi tarar, ilgili kodları bulur ve öyle karar verir.
+2.  **Gözlem Mekanizması (Observation):** Gemini bir engelle karşılaşırsa (dosya eksik, yetki hatası vb.) bunu Claude'a raporlar. Claude anında stratejiyi güncelleyerek Gemini'ye yeni rotayı çizer.
+3.  **Git Checkpoint:** Yapılan her büyük değişiklik öncesi sistem güvenliğini korur, otonom hata düzeltme döngüsüyle projenizi asla bozmaz.
+
+---
+
+## 🚀 Mimari Akış
 
 ```mermaid
 flowchart TD
     User(["👤 Sen"])
 
-    subgraph claude ["🟣 Claude  —  Planner & Reviewer"]
-        Chat["**Chat Router**
-Soru mu? Görev mi?"]
-        Planner["**Planner**
-Görevi atomik adımlara böler
-STEP 1 · STEP 2 · STEP 3"]
-        Reviewer["**Reviewer**
-ruff lint · pytest
-Hata → düzeltme döngüsü"]
-        Verifier["**Verifier**
-COMPLETE / INCOMPLETE"]
+    subgraph claude ["🟣 Claude 3.5 — Brain (Planner & Reviewer)"]
+        Search["**Deep Search (rg)**
+Arama & Araştırma"]
+        Planner["**Strategic Planner**
+Atomik Adımlar"]
+        Reviewer["**Code Reviewer**
+Linter & Test Kontrol"]
     end
 
-    subgraph gemini ["🔵 Gemini  —  Worker"]
-        Worker["**Worker**
-FILE: … · BASH: …
-Tüm adımlar tek çağrıda"]
+    subgraph gemini ["🔵 Gemini 2.0 — Hands (Worker)"]
+        Worker["**The Executor**
+FILE / BASH Otonomisi"]
     end
 
-    Answer["💬 Markdown cevap"]
-    Workspace["📁 /workspace  ✓"]
-
-    User -->|girdi| Chat
-    Chat -->|soru| Answer
-    Answer --> User
-    Chat -->|görev| Planner
-    Planner -->|plan| Worker
-    Worker -->|dosyalar + çıktı| Reviewer
-    Reviewer -->|hata varsa| Worker
-    Reviewer -->|temiz| Verifier
-    Verifier -->|INCOMPLETE| Worker
-    Verifier -->|COMPLETE| Workspace
+    User -->|Görev| Search
+    Search --> Planner
+    Planner -->|Plan| Approval{🤔 Onay?}
+    Approval -->|Evet| Worker
+    Approval -->|Hayır| User
+    Worker -->|Observation| Planner
+    Worker --> Reviewer
+    Reviewer -->|Hata Varsa| Worker
+    Reviewer -->|Temiz| User
 ```
 
 ---
 
-## Özellikler
+## 🛠️ Özellikler Listesi
 
-| | Özellik | Açıklama |
+| | Özellik | Detay |
 |---|---|---|
-| **Arayüz** | Tam ekran TUI | Textual tabanlı, resize-responsive |
-| | Slash komutları | `/` ile otomatik tamamlama |
-| | REPL modu | `--no-tui` ile klasik terminal |
-| | One-shot | `myagent "görev"` tek satırda çalışır |
-| **Pipeline** | Çift model | Claude planlar + inceler, Gemini yürütür |
-| | Review döngüsü | ruff + pytest + otomatik düzeltme |
-| | Completion verify | Görev tamamlanmadan kapanmaz |
-| | State persistence | Pipeline durumu kaydedilir, yarıda kalırsa devam edilir |
-| **Hafıza** | Session kalıcılığı | Oturumlar kaydedilir, konu özeti ile listelenir |
-| | Görev geçmişi | "bunu düzelt", "test ekle" doğal çalışır |
-| **Maliyet** | Token takibi | Claude + Gemini token kullanımı ve maliyet hesabı |
-| | Tasarruf analizi | "Tümü Claude olsaydı ne kadar öderdin?" karşılaştırması |
-| | Token limit koruması | Rate limit tespit edilince otomatik bekler ve devam eder |
-| **Teknik** | Canlı reflow | Terminal resize olunca anında yeniden düzenlenir |
-| | Cross-platform | Windows · macOS · Linux |
-| | Auth esnekliği | API key veya OAuth (Claude Code / Gemini CLI) |
-| | Docker sandbox | Tam izole çalışma ortamı |
+| **Zeka** | Hibrit Mimari | Claude Planlar/İnceler, Gemini Uygular |
+| | Otonom Döngü | Hata anında kendi kendini düzelten (Self-healing) yapı |
+| | Derin Okuma | `ripgrep` ile proje çapında bağlam (context) hakimiyeti |
+| **UX** | Responsive TUI | Ekran boyutuna göre kendini ayarlayan üç panelli dizayn |
+| | Seçim Modu | Mouse ile metin seçme ve kopyalama kolaylığı |
+| | Ayarlar Modalı | Canlı model ve API yönetimi |
+| **Güvenlik** | Docker Sandbox | `sed`, `rm`, `g++` gibi komutlar için tam izolasyon |
+| | Onay Sistemi | Her kritik işlem için kullanıcı onayı (Bypass edilebilir) |
+| **Maliyet** | Token Tracker | Anlık maliyet ve tasarruf analizi (`/status`) |
+| | Otomatik Sıkıştırma | Konuşma geçmişini otonom özetleme (`/compact`) |
 
 ---
 
-## Kurulum
+## ⌨️ Klavye Kısayolları
 
-### Gereksinimler
-
-| Gereksinim | Açıklama |
+| Tuş | Fonksiyon |
 |---|---|
-| Python 3.10+ | |
-| **Claude için** | `ANTHROPIC_API_KEY` **ya da** Claude Code CLI (`claude login`) |
-| **Gemini için** | `GEMINI_API_KEY` **ya da** Gemini CLI (`gemini login`) |
-
-> Claude Code aboneliğin (Pro/Max) varsa API key gerekmez — myAgent direkt kullanır.
+| **`Ctrl+B`** | **Dosya Gezgini'ni (Sol Panel) aç / kapat** |
+| **`Ctrl+E`** | **İşlem Takibi'ni (Sağ Panel) aç / kapat** |
+| **`Ctrl+K`** | **Kelime Seçim Modu (Seç & Kopyala)** |
+| **`Ctrl+S`** | **Ayarlar Modalını aç** |
+| `Ctrl+L` | Ekranı ve logları temizle |
+| `Ctrl+Y` | Son AI cevabını panoya kopyala |
+| `↑` / `↓` | Komut geçmişinde gezin |
+| `Tab` | Komutları otomatik tamamla |
+| `F1` | Yardım menüsünü göster |
+| `Ctrl+C` | Durdur / Çıkış (Güvenli autosave) |
 
 ---
 
-### Seçenek A — Python venv
+## 📦 Kurulum ve Çalıştırma
+
+### A — Docker (Önerilen - En Güçlü Mod)
+*Bu modda ajan tam otonomi ile çalışır ve sisteminizden izole kalır.*
 
 ```bash
-git clone https://github.com/Mustafkgl/myAgent.git
-cd myAgent
+docker compose build
+./run.sh
 ```
 
-**Linux / macOS:**
+### B — Lokal venv (Hızlı Mod)
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 python -m myagent
 ```
 
-**Windows:**
-```powershell
-python -m venv .venv; .venv\Scripts\Activate.ps1
-pip install -e .
-python -m myagent
-```
-
-### Seçenek B — Docker (önerilir)
-
-`~/.claude`, `~/.gemini`, `~/.myagent` otomatik mount edilir.
-
-```bash
-cd myAgent
-docker compose build
-docker compose run --rm myagent
-```
-
-```bash
-./run.sh                          # interaktif başlat
-./run.sh "port scanner yaz"       # tek seferlik görev
-./run.sh --build                  # rebuild + başlat
-./run.sh --shell                  # container bash'ine gir
-```
-
-### İlk Çalıştırma
-
-İlk açılışta kurulum sihirbazı çalışır. Sonradan `/auth` ve `/model` ile değiştirilebilir.
-
 ---
 
-## Kullanım
+## 📁 Dosya Yapısı
 
-Uygulama tam ekran TUI ile açılır. Claude her girdiyi otomatik değerlendirir: **soru mu → cevap**, **görev mi → pipeline**.
-
-```
-myagent> basit bir şifre üreteci yaz
-myagent> buna GUI ekle
-myagent> az önce yazdığın kodu açıkla
-myagent> fibonacci nedir?
-myagent> düzelt
-myagent> test ekle
-```
-
-### Klavye Kısayolları
-
-| Kısayol | Açıklama |
-|---|---|
-| `↑` / `↓` | Girdi geçmişinde gez |
-| `Tab` | Slash komutunu otomatik tamamla |
-| `Ctrl+Y` | Son AI cevabını panoya kopyala |
-| `Ctrl+L` | Ekranı temizle |
-| `F1` | Yardım |
-| `Ctrl+C` | İlk basış uyarı verir, ikinci basış çıkış |
-| `Esc` | Açık ekranı kapat |
-
-### Slash Komutları
-
-`/` yazmaya başlayınca altta otomatik tamamlama açılır.
-
-| Komut | Açıklama |
-|---|---|
-| `/help` | Tüm komutları ve kısayolları göster |
-| `/auth` | Kimlik doğrulama ekranı |
-| `/model` | Model seçim ekranı |
-| `/config` | Mevcut yapılandırmayı göster |
-| `/doctor` | Sistem sağlık kontrolü ve diyagnostik |
-| `/status` | Oturum istatistikleri |
-| `/about` | Versiyon ve model bilgileri |
-| `/think` | Verbose modunu aç / kapat |
-| `/theme dark\|light` | Temayı değiştir |
-| `/sessions` | Kayıtlı oturumları konu özetiyle listele |
-| `/load <n\|id>` | Oturum yükle |
-| `/rename [n\|id] <ad>` | Oturumu yeniden adlandır (herhangi birini) |
-| `/delete <n\|id>` | Oturumu çöp kutusuna taşı |
-| `/trash` | Çöp kutusunu listele |
-| `/restore <n\|id>` | Çöp kutusundan geri al |
-| `/purge [n\|id\|all]` | Çöp kutusundan kalıcı sil |
-| `/new` | Yeni oturum başlat |
-| `/export` | Oturumu Markdown dosyasına aktar |
-| `/compact` | Konuşma geçmişini özetleyip sıkıştır |
-| `/editor` | `$EDITOR` aç — çok satırlı giriş |
-| `/clear` | Ekranı temizle |
-| `/exit` | Çıkış |
-
----
-
----
-
-## Pipeline Durumu ve Devam Ettirme
-
-Pipeline bir görev sırasında kesilirse (Ctrl+C, network hatası, token limiti) durum otomatik kaydedilir. Sonraki oturumda kaldığı yerden devam edilir.
-
-```bash
-# Kayıtlı pipeline oturumlarını listele
-python -m myagent --sessions
-
-# En son yarım kalan oturumu devam ettir
-python -m myagent --resume
-
-# Belirli bir oturumu devam ettir
-python -m myagent --resume abc12345
-```
-
----
-
-## Token Takibi ve Maliyet Tasarrufu
-
-`/status` komutu anlık token kullanımını ve gerçek maliyet tasarrufunu gösterir:
-
-```
-  Token Kullanımı
-  ◆ Claude:   12,450 giriş  +  3,200 çıkış  =  $0.0481
-  ✦ Gemini:   85,000 giriş  +  12,000 çıkış  =  $0.0000
-
-  Maliyet Tasarrufu
-  Tümü Claude olsaydı:   $0.3820
-  Gerçek maliyet:        $0.0481
-  Tasarruf:              $0.3339  (%87.4)
-
-  Verimlilik
-  Toplam görev:   8
-  İlk seferde:    6  (%75)
-```
-
-> Token limiti (rate limit) tespit edilince myAgent otomatik bekler ve görev kaldığı yerden devam eder.
-
----
-
-### /auth Ekranı
-
-<div align="center">
-<img src="docs/screenshot_auth.png" alt="/auth ekranı" width="720"/>
-</div>
-
-### Görev Çalışırken
-
-<div align="center">
-<img src="docs/screenshot_task.png" alt="Görev çalışırken" width="720"/>
-</div>
-
----
-
-## CLI Referansı
-
-```
-python -m myagent [GÖREV] [SEÇENEKLER]
-```
-
-| Seçenek | Açıklama |
-|---|---|
-| `--resume [SESSION_ID]` | Yarıda kalan pipeline oturumunu devam ettir |
-| `--sessions` | Kayıtlı pipeline oturumlarını listele |
-| `--no-tui` | TUI yerine klasik REPL modunda başlat |
-| `--claude-model MODEL` | Claude modeli — alias veya tam ID |
-| `--gemini-model MODEL` | Gemini modeli — alias veya tam ID |
-| `--work-dir PATH` | Dosya yazma dizini |
-| `--max-steps N` | Maksimum plan adımı (varsayılan: 10) |
-| `--dry-run` | Planı göster, yürütme |
-| `--no-review` | Review döngüsünü atla |
-| `--clarify` | Başlamadan önce netleştirme soruları sor |
-| `--verbose` / `-v` | Ham model çıktısını göster |
-| `--setup` | Kurulum sihirbazını çalıştır |
-| `--list-models` | Mevcut modelleri listele |
-| `--version` | Versiyon bilgisi |
-
-**Model alias'ları:**
-
-| Alias | Model |
-|---|---|
-| `opus` | `claude-opus-4-7` |
-| `sonnet` | `claude-sonnet-4-6` |
-| `haiku` | `claude-haiku-4-5-20251001` |
-| `2.5-flash` | `gemini-2.5-flash` |
-| `2.5-pro` | `gemini-2.5-pro` |
-| `flash` | `gemini-2.0-flash` |
-
----
-
-## Auth Yapılandırması
-
-```json
-{
-  "claude_mode":  "cli",
-  "claude_model": "claude-sonnet-4-6",
-  "gemini_mode":  "api",
-  "gemini_model": "gemini-2.5-flash"
-}
-```
-
-| Sağlayıcı | Mod | Gereksinim |
-|---|---|---|
-| Claude | `api` | `ANTHROPIC_API_KEY` |
-| Claude | `cli` | `claude` CLI + `claude login` |
-| Gemini | `api` | `GEMINI_API_KEY` |
-| Gemini | `cli` | `gemini` CLI + `gemini login` |
-
-```bash
-curl -fsSL https://claude.ai/install.sh | sh && claude login
-npm install -g @google/gemini-cli && gemini login
-```
-
----
-
-## Proje Yapısı
-
-```
-myagent/
-├── myagent/
-│   ├── cli.py              ← REPL, argparse, SessionState
-│   ├── tui.py              ← Textual TUI, slash komutları
-│   ├── auth_screen.py      ← /auth ekranı
-│   ├── model_screen.py     ← /model ekranı
-│   ├── ui.py               ← Rich terminal (streaming, Live)
-│   ├── interrupt.py        ← ESC / Ctrl+C yönetimi
-│   ├── models.py           ← model kayıt defteri, canlı keşif
-│   ├── setup_wizard.py     ← ilk çalıştırma sihirbazı
-│   │
-│   ├── agent/
-│   │   ├── pipeline.py     ← tam döngü orkestrasyonu, state checkpoint
-│   │   ├── state.py        ← PipelineState, session kaydetme/yükleme
-│   │   ├── chat.py         ← soru ↔ görev yönlendirme
-│   │   ├── planner.py      ← Claude → STEP listesi
-│   │   ├── claude_runner.py← token limit tespiti, otomatik retry
-│   │   ├── worker.py       ← Gemini → FILE/BASH çıktısı
-│   │   ├── executor.py     ← güvenli dosya yazımı + komut
-│   │   ├── reviewer.py     ← ruff + pytest + düzeltme döngüsü
-│   │   ├── completer.py    ← tamamlama doğrulayıcı
-│   │   ├── tokens.py       ← TokenTracker, maliyet hesabı
-│   │   ├── doctor.py       ← sistem sağlık kontrolü
-│   │   └── deps.py         ← eksik pip paket tespiti
-│   │
-│   ├── memory/
-│   │   └── history.py      ← kalıcı görev geçmişi (jsonl)
-│   │
-│   └── config/
-│       ├── settings.py     ← sabitler, validate()
-│       └── auth.py         ← mod/model tespiti, config I/O
-│
-├── docs/
-├── docker-compose.yml
-├── Dockerfile
-└── run.sh
-```
-
----
-
-## Güvenlik
-
-- **Path traversal koruması** — tüm dosya yazma işlemleri `WORK_DIR` içinde kontrol edilir
-- **`shell=False`** — injection mümkün değil
-- **`eval()` / `exec()` yok** — hiçbir yerde kullanılmaz
-- **Docker sandbox** — `MYAGENT_DOCKER=1` ile tam izolasyon
-
-| Dosya | İçerik |
-|---|---|
-| `~/.myagent/config.json` | Mod ve model tercihleri |
-| `~/.myagent/.env` | API key'ler |
-| `~/.myagent/sessions/*.json` | Oturum geçmişi |
-| `~/.myagent/pipeline_sessions/` | Pipeline durum dosyaları |
-| `~/.myagent/history.jsonl` | Görev geçmişi |
+- `myagent/tui.py`: Modern Textual arayüzü ve kısayollar.
+- `myagent/agent/pipeline.py`: Claude ↔ Gemini otonom döngüsü.
+- `myagent/agent/planner.py`: `ripgrep` tabanlı derin araştırma mantığı.
+- `myagent/agent/executor.py`: Güvenli dosya yazma ve BASH yönetimi.
 
 <div align="center">
 
 ---
 
-*Claude düşünür. Gemini çalışır.*
+*Claude Düşünür. Gemini Çalışır. myAgent Yönetir.*
 
 </div>

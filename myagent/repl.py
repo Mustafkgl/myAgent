@@ -29,7 +29,6 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
@@ -646,12 +645,6 @@ def _dispatch(state: ReplState, raw: str) -> bool:
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def _rule() -> None:
-    _console.rule(style="dim")
-
-
-
-
 def _copy_to_clipboard(text: str) -> bool:
     try:
         if sys.platform == "darwin":
@@ -781,8 +774,16 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
 
     def _rprompt():
         from myagent.config.auth import get_claude_model
-        model = get_claude_model().split("-")[-1]  # e.g. "sonnet-4-5" → "4-5"
+        model = get_claude_model().split("-")[-1]
         return HTML(f'<ansibrightblack>◆ {model}  ? kısayollar  /help komutlar</ansibrightblack>')
+
+    def _prompt_message():
+        try:
+            width = os.get_terminal_size().columns
+        except OSError:
+            width = 80
+        rule = "─" * width
+        return HTML(f'<ansibrightblack>{rule}</ansibrightblack>\n<ansipurple><b>❯</b></ansipurple> ')
 
     prompt_session: PromptSession = PromptSession(
         history=FileHistory(str(history_path)),
@@ -795,20 +796,12 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
     )
 
     _print_banner(state)
-    _rule()  # tek seferlik başlangıç rule'u
 
     quit_confirm = False
-    had_output = False  # rule sadece gerçek output sonrası basılsın
 
     while True:
-        if had_output:
-            _rule()
-            had_output = False
-
         try:
-            raw = prompt_session.prompt(
-                HTML("<ansipurple><b>❯</b></ansipurple> ")
-            ).strip()
+            raw = prompt_session.prompt(_prompt_message).strip()
             quit_confirm = False
         except KeyboardInterrupt:
             if quit_confirm:
@@ -817,7 +810,6 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
                 break
             quit_confirm = True
             _console.print(Text("  Çıkmak için tekrar Ctrl+C yapın.\n", style="dim yellow"))
-            had_output = True
             continue
         except EOFError:
             state.autosave()
@@ -825,9 +817,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
             break
 
         if not raw:
-            continue  # boş enter → sessizce devam, rule yok
-
-        had_output = True
+            continue
 
         # ? alone → shortcuts
         if raw == "?":

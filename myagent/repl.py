@@ -203,6 +203,7 @@ def _print_banner(state: ReplState | None = None) -> None:
         "     ↑↓ geçmiş · Tab tamamla · Ctrl+O editör · Ctrl+Y kopyala · ? kısayollar\n",
         style="dim",
     ))
+    _console.rule(style="dim")
 
 
 # ---------------------------------------------------------------------------
@@ -805,7 +806,6 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
     quit_confirm = False
 
     while True:
-        _console.rule(style="dim")
         try:
             raw = prompt_session.prompt(
                 HTML("<ansipurple><b>❯</b></ansipurple> ")

@@ -788,7 +788,6 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         history=FileHistory(str(history_path)),
         completer=_SlashCompleter(),
         complete_while_typing=True,
-        complete_in_thread=True,
         key_bindings=kb,
         enable_history_search=True,
         multiline=False,

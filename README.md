@@ -1,4 +1,3 @@
-
 <div align="center">
 
 <img src="banner.png" alt="myAgent" width="672"/>
@@ -86,17 +85,20 @@ Tüm adımlar tek çağrıda"]
 
 | | Özellik | Açıklama |
 |---|---|---|
-| **Arayüz** | Tam ekran TUI | Textual tabanlı, resize-responsive |
+| **Arayüz** | prompt_toolkit + rich REPL | Alternate screen yok: scrollback çalışır, mouse ile metin seçilir |
 | | Slash komutları | `/` ile otomatik tamamlama |
-| | REPL modu | `--no-tui` ile klasik terminal |
 | | One-shot | `myagent "görev"` tek satırda çalışır |
+| | Legacy TUI | `--legacy-tui` ile eski Textual arayüzü |
 | **Pipeline** | Çift model | Claude planlar + inceler, Gemini yürütür |
 | | Review döngüsü | ruff + pytest + otomatik düzeltme |
 | | Completion verify | Görev tamamlanmadan kapanmaz |
-| **Hafıza** | Session kalıcılığı | Oturumlar kaydedilir, isimlendirilir |
+| | State persistence | Pipeline durumu kaydedilir, yarıda kalırsa devam edilir |
+| **Hafıza** | Session kalıcılığı | Oturumlar kaydedilir, isimlendirilir, konu özeti gösterilir |
 | | Görev geçmişi | "bunu düzelt", "test ekle" doğal çalışır |
-| **Teknik** | Canlı reflow | Terminal resize olunca anında yeniden düzenlenir |
-| | Cross-platform | Windows · macOS · Linux |
+| **Maliyet** | Token takibi | Claude + Gemini token kullanımı ve maliyet hesabı |
+| | Tasarruf analizi | "Tümü Claude olsaydı ne kadar öderdin?" karşılaştırması |
+| | Token limit koruması | Rate limit tespit edilince otomatik bekler ve devam eder |
+| **Teknik** | Cross-platform | Windows · macOS · Linux |
 | | Auth esnekliği | API key veya OAuth (Claude Code / Gemini CLI) |
 | | Docker sandbox | Tam izole çalışma ortamı |
 
@@ -162,15 +164,15 @@ docker compose run --rm myagent
 
 ## Kullanım
 
-Uygulama tam ekran TUI ile açılır. Claude her girdiyi otomatik değerlendirir: **soru mu → cevap**, **görev mi → pipeline**.
+Uygulama `prompt_toolkit + rich` tabanlı REPL ile açılır. Claude her girdiyi otomatik değerlendirir: **soru mu → cevap**, **görev mi → pipeline**.
 
 ```
-myagent> basit bir şifre üreteci yaz
-myagent> buna GUI ekle
-myagent> az önce yazdığın kodu açıkla
-myagent> fibonacci nedir?
-myagent> düzelt
-myagent> test ekle
+❯ basit bir şifre üreteci yaz
+❯ buna GUI ekle
+❯ az önce yazdığın kodu açıkla
+❯ fibonacci nedir?
+❯ düzelt
+❯ test ekle
 ```
 
 ### Klavye Kısayolları
@@ -179,29 +181,36 @@ myagent> test ekle
 |---|---|
 | `↑` / `↓` | Girdi geçmişinde gez |
 | `Tab` | Slash komutunu otomatik tamamla |
+| `Ctrl+O` | `$EDITOR` aç — çok satırlı giriş |
 | `Ctrl+Y` | Son AI cevabını panoya kopyala |
+| `Ctrl+N` | Yeni oturum başlat |
 | `Ctrl+L` | Ekranı temizle |
-| `F1` | Yardım |
+| `Ctrl+R` | Geçmişte ara (reverse search) |
+| `Ctrl+A` | Satır başına git |
+| `Ctrl+E` | Satır sonuna git |
+| `Ctrl+K` | Satır sonunu sil |
+| `Ctrl+W` | Önceki kelimeyi sil |
 | `Ctrl+C` | İlk basış uyarı verir, ikinci basış çıkış |
-| `Esc` | Açık ekranı kapat |
+| `Ctrl+D` | Çıkış |
+| `?` | Kısayolları göster |
+| `! <komut>` | Shell komutu çalıştır (`! ls`, `! git status`) |
 
 ### Slash Komutları
 
-`/` yazmaya başlayınca altta otomatik tamamlama açılır.
+`/` yazmaya başlayınca otomatik tamamlama açılır.
 
 | Komut | Açıklama |
 |---|---|
-| `/help` | Tüm komutları ve kısayolları göster |
-| `/auth` | Kimlik doğrulama ekranı |
-| `/model` | Model seçim ekranı |
+| `/help` | Tüm komutları göster |
+| `/about` | Versiyon ve model bilgileri |
+| `/auth` | API anahtarları ve yapılandırma |
+| `/model claude\|gemini <model>` | Model değiştir |
 | `/config` | Mevcut yapılandırmayı göster |
 | `/doctor` | Sistem sağlık kontrolü ve diyagnostik |
-| `/status` | Oturum istatistikleri |
-| `/about` | Versiyon ve model bilgileri |
+| `/status` | Token kullanımı, maliyet tasarrufu, verimlilik |
 | `/think` | Verbose modunu aç / kapat |
-| `/theme dark\|light` | Temayı değiştir |
-| `/sessions` | Kayıtlı oturumları listele |
-| `/load <n>` | Oturum yükle |
+| `/sessions` | Kayıtlı oturumları konu özetiyle listele |
+| `/load <n veya id>` | Oturum yükle |
 | `/rename <ad>` | Oturumu yeniden adlandır |
 | `/new` | Yeni oturum başlat |
 | `/export` | Oturumu Markdown dosyasına aktar |
@@ -212,17 +221,43 @@ myagent> test ekle
 
 ---
 
-### /auth Ekranı
+## Pipeline Durumu ve Devam Ettirme
 
-<div align="center">
-<img src="docs/screenshot_auth.png" alt="/auth ekranı" width="720"/>
-</div>
+Pipeline bir görev sırasında kesilirse (Ctrl+C, network hatası, token limiti) durum otomatik kaydedilir. Sonraki oturumda kaldığı yerden devam edilir.
 
-### Görev Çalışırken
+```bash
+# Kayıtlı pipeline oturumlarını listele
+python -m myagent --sessions
 
-<div align="center">
-<img src="docs/screenshot_task.png" alt="Görev çalışırken" width="720"/>
-</div>
+# En son yarım kalan oturumu devam ettir
+python -m myagent --resume
+
+# Belirli bir oturumu devam ettir
+python -m myagent --resume abc12345
+```
+
+---
+
+## Token Takibi ve Maliyet Tasarrufu
+
+`/status` komutu anlık token kullanımını ve gerçek maliyet tasarrufunu gösterir:
+
+```
+  Token Kullanımı
+  ◆ Claude:   12,450 giriş  +  3,200 çıkış  =  $0.0481
+  ✦ Gemini:   85,000 giriş  +  12,000 çıkış  =  $0.0000
+
+  Maliyet Tasarrufu
+  Tümü Claude olsaydı:   $0.3820
+  Gerçek maliyet:        $0.0481
+  Tasarruf:              $0.3339  (%87.4)
+
+  Verimlilik
+  Toplam görev:   8
+  İlk seferde:    6  (%75)
+```
+
+> Token limiti (rate limit) tespit edilince myAgent otomatik bekler ve görev kaldığı yerden devam eder.
 
 ---
 
@@ -234,7 +269,10 @@ python -m myagent [GÖREV] [SEÇENEKLER]
 
 | Seçenek | Açıklama |
 |---|---|
-| `--no-tui` | TUI yerine klasik REPL modunda başlat |
+| `--resume [SESSION_ID]` | Yarıda kalan pipeline oturumunu devam ettir |
+| `--sessions` | Kayıtlı pipeline oturumlarını listele |
+| `--legacy-tui` | Textual tabanlı eski TUI ile başlat |
+| `--no-tui` | REPL'siz, pipe/CI modunda başlat |
 | `--claude-model MODEL` | Claude modeli — alias veya tam ID |
 | `--gemini-model MODEL` | Gemini modeli — alias veya tam ID |
 | `--work-dir PATH` | Dosya yazma dizini |
@@ -290,23 +328,26 @@ npm install -g @google/gemini-cli && gemini login
 ```
 myagent/
 ├── myagent/
-│   ├── cli.py              ← REPL, argparse, SessionState
-│   ├── tui.py              ← Textual TUI, slash komutları
-│   ├── auth_screen.py      ← /auth ekranı
-│   ├── model_screen.py     ← /model ekranı
+│   ├── cli.py              ← argparse, SessionState, --resume, --sessions
+│   ├── repl.py             ← prompt_toolkit + rich REPL (ana arayüz)
+│   ├── tui.py              ← Textual TUI (--legacy-tui ile erişilir)
 │   ├── ui.py               ← Rich terminal (streaming, Live)
 │   ├── interrupt.py        ← ESC / Ctrl+C yönetimi
 │   ├── models.py           ← model kayıt defteri, canlı keşif
 │   ├── setup_wizard.py     ← ilk çalıştırma sihirbazı
 │   │
 │   ├── agent/
-│   │   ├── pipeline.py     ← tam döngü orkestrasyonu
+│   │   ├── pipeline.py     ← tam döngü orkestrasyonu, state checkpoint
+│   │   ├── state.py        ← PipelineState, session kaydetme/yükleme
 │   │   ├── chat.py         ← soru ↔ görev yönlendirme
 │   │   ├── planner.py      ← Claude → STEP listesi
+│   │   ├── claude_runner.py← token limit tespiti, otomatik retry
 │   │   ├── worker.py       ← Gemini → FILE/BASH çıktısı
 │   │   ├── executor.py     ← güvenli dosya yazımı + komut
 │   │   ├── reviewer.py     ← ruff + pytest + düzeltme döngüsü
 │   │   ├── completer.py    ← tamamlama doğrulayıcı
+│   │   ├── tokens.py       ← TokenTracker, maliyet hesabı
+│   │   ├── doctor.py       ← sistem sağlık kontrolü
 │   │   └── deps.py         ← eksik pip paket tespiti
 │   │
 │   ├── memory/
@@ -316,6 +357,7 @@ myagent/
 │       ├── settings.py     ← sabitler, validate()
 │       └── auth.py         ← mod/model tespiti, config I/O
 │
+├── tests/
 ├── docs/
 ├── docker-compose.yml
 ├── Dockerfile
@@ -336,6 +378,7 @@ myagent/
 | `~/.myagent/config.json` | Mod ve model tercihleri |
 | `~/.myagent/.env` | API key'ler |
 | `~/.myagent/sessions/*.json` | Oturum geçmişi |
+| `~/.myagent/pipeline_sessions/` | Pipeline durum dosyaları |
 | `~/.myagent/history.jsonl` | Görev geçmişi |
 
 <div align="center">

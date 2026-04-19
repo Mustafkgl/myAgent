@@ -120,17 +120,18 @@ def _sessions_list() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 _BANNER = """\
-                              █████████
-                             ███░░░░░███
- █████████████   █████ ████ ░███    ░███   ███████  ██████  ████████   █████
-░░███░░███░░███ ░░███ ░███  ░███████████  ███░░███ ███░░███░░███░░███ ░░███
- ░███ ░███ ░███  ░███ ░███  ░███░░░░░███ ░███ ░███░███████  ░███ ░███ ███████
- ░███ ░███ ░███  ░███ ░███  ░███    ░███ ░███ ░███░███░░░   ░███ ░███░░░███░
- █████░███ █████ ░░███████  █████   █████░░███████░░██████  ████ ████  ░███
-░░░░░ ░░░ ░░░░░   ░░░░░███ ░░░░░   ░░░░░  ░░░░░███ ░░░░░░  ░░░░ ░░░░░  ░███ ███
-                  ███ ░███                ███ ░███                     ░░█████
-                 ░░██████                ░░██████                       ░░░░░
-                  ░░░░░░                  ░░░░░░"""
+
+                                  █████████
+                                 ███░░░░░███
+     █████████████   █████ ████ ░███    ░███   ███████  ██████  ████████   █████
+    ░░███░░███░░███ ░░███ ░███  ░███████████  ███░░███ ███░░███░░███░░███ ░░███
+     ░███ ░███ ░███  ░███ ░███  ░███░░░░░███ ░███ ░███░███████  ░███ ░███ ███████
+     ░███ ░███ ░███  ░███ ░███  ░███    ░███ ░███ ░███░███░░░   ░███ ░███░░░███░
+     █████░███ █████ ░░███████  █████   █████░░███████░░██████  ████ ████  ░███
+    ░░░░░ ░░░ ░░░░░   ░░░░░███ ░░░░░   ░░░░░  ░░░░░███ ░░░░░░  ░░░░ ░░░░░  ░███ ███
+                      ███ ░███                ███ ░███                     ░░█████
+                     ░░██████                ░░██████                       ░░░░░
+                      ░░░░░░                  ░░░░░░"""
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +183,7 @@ def _print_banner(state: ReplState | None = None) -> None:
         ("  ✦ ", "#4285F4"), (get_gemini_model(), "#E8EAED"), ("\n", ""),
     ))
     _console.print(Text(
-        "  ↑↓ geçmiş · Tab otomatik tamamla · Ctrl+Y kopyala · /help yardım\n",
+        "     ↑↓ geçmiş · Tab otomatik tamamla · Ctrl+Y kopyala · ? for shortcuts\n",
         style="dim",
     ))
 
@@ -627,6 +628,25 @@ def _dispatch(state: ReplState, raw: str) -> bool:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+def _term_width() -> int:
+    try:
+        return os.get_terminal_size().columns
+    except OSError:
+        return 80
+
+
+def _rule() -> None:
+    _console.print("─" * _term_width(), style="dim")
+
+
+def _bottom_toolbar():
+    from myagent.config.auth import get_claude_model
+    model = get_claude_model()
+    return HTML(f' <b>?</b> for shortcuts'
+                f'                                        '
+                f'◐ {model}')
+
+
 def start_repl(session: "SessionState", verbose: bool = False) -> None:
     state = ReplState(session, verbose=verbose)
 
@@ -638,6 +658,7 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
         completer=_SlashCompleter(),
         complete_while_typing=True,
         complete_in_thread=True,
+        bottom_toolbar=_bottom_toolbar,
     )
 
     _print_banner(state)
@@ -645,9 +666,10 @@ def start_repl(session: "SessionState", verbose: bool = False) -> None:
     quit_confirm = False
 
     while True:
+        _rule()
         try:
             raw = prompt_session.prompt(
-                HTML("<ansipurple><b>myagent</b></ansipurple> <ansibrightblack>❯</ansibrightblack> ")
+                HTML("<ansipurple><b>❯</b></ansipurple> ")
             ).strip()
             quit_confirm = False
         except KeyboardInterrupt:

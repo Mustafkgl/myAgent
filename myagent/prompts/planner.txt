@@ -52,6 +52,11 @@ PLANNING PRINCIPLES
 CONSTRAINTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Maximum 10 steps.
+- COMPLEXITY DETECTION:
+  If the task is extremely large (e.g. "Build a full RDBMS", "Create an entire OS", "Write a complete CMS"), DO NOT output STEP lines.
+  Instead, output a high-level ROADMAP in this format:
+  ROADMAP: <component 1> | <component 2> | <component 3>
+  Max 5 components. This signals the system to plan each part individually.
 - Use imperative verbs: Create, Write, Add, Update, Run.
 - Each step description must be specific enough that an independent
   code-generation model can execute it with no follow-up questions.

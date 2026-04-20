@@ -181,17 +181,58 @@ def plan(
 ) -> tuple[list[str], str]:
     """Return (steps, interface_contract) for *task*.
 
-    steps: ordered list of step strings
-    interface_contract: INTERFACE: block describing file contracts between steps,
-        or "" if the plan involves only a single file.
-
-    session_context: optional extra context injected by the REPL.
+    Supports ROADMAP detection for recursive planning of complex projects.
     """
-    from myagent.config.auth import CLI, get_claude_mode
+    from myagent.config.auth import CLI, API, get_claude_mode
     mode = get_claude_mode()
-    if verbose:
-        from myagent.config.auth import get_claude_model
-        print(f"  [planner] mode={mode}  model={get_claude_model()}", flush=True)
+    
+    # ── Complexity Detection & Roadmap (Stage 0) ──────────────────────────────
+    massive_keywords = (
+        "RDBMS", "REDIS", "OPERATING SYSTEM", "DATABASE ENGINE", 
+        "ENTERPRISE", "DISTRIBUTED", "COMPLEX", "LARGE SCALE",
+        "FULL PROJECT", "COMPLETE SYSTEM"
+    )
+    is_massive = any(k in task.upper() for k in massive_keywords)
+    
+    # Extra heuristic: if the prompt is very long, it's likely a massive task
+    if len(task) > 500:
+        is_massive = True
+    
+    if is_massive:
+        if stream_callback:
+            stream_callback("\n[planner] Massive project detected. Generating Roadmap via Gemini...\n")
+        
+        # We use Gemini for the high-level roadmap to save Claude tokens and machine resources
+        from myagent.agent.worker import _gemini_api_batch
+        roadmap_prompt = (
+            f"Task: {task}\n\n"
+            "This project is too large for a single plan. "
+            "Output ONLY a ROADMAP line with major components separated by pipes (|).\n"
+            "Format: ROADMAP: Comp 1 | Comp 2 | Comp 3 | Comp 4 | Comp 5"
+        )
+        try:
+            raw_roadmap = _gemini_api_batch(roadmap_prompt)
+            roadmap_match = re.search(r"ROADMAP:\s*(.+)", raw_roadmap, re.IGNORECASE)
+            if roadmap_match:
+                components = [c.strip() for c in roadmap_match.group(1).split("|")]
+                if stream_callback:
+                    stream_callback(f"\n[planner] Roadmap: {', '.join(components)}\n")
+                
+                all_steps = []
+                all_interfaces = []
+                for comp in components:
+                    if stream_callback:
+                        stream_callback(f"\n[planner] Planning component: {comp}...\n")
+                    # Claude plans each component individually
+                    comp_steps, comp_int = plan(f"Plan for component: {comp} (Part of task: {task})", 
+                                                verbose=False, stream_callback=stream_callback)
+                    all_steps.extend(comp_steps)
+                    if comp_int: all_interfaces.append(comp_int)
+                
+                return all_steps[:20], "\n".join(all_interfaces)
+        except Exception as e:
+            if stream_callback:
+                stream_callback(f"\n[planner] Gemini roadmap failed: {e}. Falling back to normal mode.\n")
 
     context = _build_context()
     research = _run_research(task, stream_callback=stream_callback)
@@ -205,12 +246,14 @@ def plan(
         parts.append(f"Session context:\n{session_context}")
     full_task = "\n\n".join(parts)
 
+    if verbose:
+        from myagent.config.auth import get_claude_model
+        print(f"  [planner] mode={mode}  model={get_claude_model()}", flush=True)
+
     if mode == CLI:
         raw = _plan_via_cli(full_task, stream_callback=stream_callback)
     else:
         raw = _plan_via_api(full_task, stream_callback=stream_callback)
-    if verbose:
-        print(f"  [planner raw output]\n{raw}\n", flush=True)
 
     from myagent.config.auth import get_max_steps
     steps = _parse_steps(raw)[:get_max_steps()]
@@ -341,17 +384,28 @@ def _plan_via_api(task: str, stream_callback=None) -> str:
 # CLI mode
 # ---------------------------------------------------------------------------
 
-def _plan_via_cli(task: str, stream_callback=None) -> str:
+def _plan_via_cli(task: str, stream_callback=None, roadmap: bool = False) -> str:
     from myagent.agent.claude_runner import _FALLBACK_SENTINEL, is_error, run_claude_cli
     from myagent.config.auth import get_claude_model
 
     model = get_claude_model()
-    full_prompt = f"{_system_prompt()}\n\nTask: {task}"
-    cmd = ["claude", "-p", full_prompt, "--model", model]
+    
+    if roadmap:
+        # Force high-level roadmap mode with 1 step limit and specific instruction
+        roadmap_task = (
+            f"{task}\n\n"
+            "This project is too large for a single plan. "
+            "Output ONLY a ROADMAP line with major components separated by pipes (|).\n"
+            "Format: ROADMAP: Comp 1 | Comp 2 | Comp 3"
+        )
+        cmd = ["claude", "-p", roadmap_task, "--model", model, "--max-steps", "1"]
+    else:
+        full_prompt = f"{_system_prompt()}\n\nTask: {task}"
+        cmd = ["claude", "-p", full_prompt, "--model", model]
 
-    output = run_claude_cli(cmd, full_prompt, model, timeout=120, stream_callback=stream_callback)
+    output = run_claude_cli(cmd, task if roadmap else full_prompt, model, timeout=120, stream_callback=stream_callback)
     if is_error(output):
-        raise RuntimeError("Claude CLI planlama başarısız. Token limiti veya bağlantı hatası.")
+        raise RuntimeError("Claude CLI planning failed. Token limit or connection error.")
     return output
 
 

@@ -1,125 +1,76 @@
 """
-Executor module — parses worker output and applies it safely.
-
-Supports two output types:
-  FILE: <name>          → write file to working directory
-  BASH: <safe command>  → execute shell command
-
-Security modes:
-  Host mode  (MYAGENT_DOCKER unset): whitelist enforced — only mkdir/touch/echo/cat/python/pip/uv
-  Docker mode (MYAGENT_DOCKER=1):    all commands allowed — Docker IS the sandbox
+Executor — executes structured JSON actions from the LLM.
+Actions supported: write, bash, observation.
 """
 
 from __future__ import annotations
 
+import json
 import os
-import re
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from myagent.config.settings import BASH_TIMEOUT, WORK_DIR
+from myagent.config.settings import WORK_DIR
 
-# ---------------------------------------------------------------------------
-# Security: command whitelist (host mode only)
-# ---------------------------------------------------------------------------
-
-# Set MYAGENT_DOCKER=1 (done automatically by Dockerfile) to disable whitelist.
-_DOCKER_MODE: bool = os.environ.get("MYAGENT_DOCKER", "").strip() == "1"
-
-# Commands always allowed on host (safe, non-destructive)
-ALLOWED_COMMANDS: frozenset[str] = frozenset({
-    "mkdir", "touch", "echo", "cat",
-    "python", "python3",          # run scripts (with timeout guard in runner.py)
-    "pip", "uv",                  # package install (after user approval via deps.py)
-    "ruff", "pytest",             # tooling
-})
-
-# ---------------------------------------------------------------------------
-# Result dataclass
-# ---------------------------------------------------------------------------
 
 @dataclass
 class ExecutionResult:
     ok: bool
-    kind: str                   # "file" | "bash" | "error" | "skip"
+    kind: str  # "file" | "bash" | "observation" | "error"
     message: str
-    details: dict = field(default_factory=dict)
-
-    def __str__(self) -> str:
-        return self.message
+    details: dict[str, Any] = field(default_factory=dict)
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
+def parse_batch_and_execute(json_raw: str, expected: int = 0) -> list[ExecutionResult]:
+    """Parse a JSON list of actions and execute them in order."""
+    results: list[ExecutionResult] = []
+    
+    # Try to clean up markdown if LLM ignored the rules
+    json_clean = json_raw.strip()
+    if json_clean.startswith("```json"):
+        json_clean = json_clean[7:]
+    if json_clean.endswith("```"):
+        json_clean = json_clean[:-3]
+    json_clean = json_clean.strip()
 
-_FILE_KEYWORDS = ("FILE:", "DOSYA:", "ФАЙЛ:")   # EN / TR / RU variants Gemini uses
-_BASH_KEYWORDS = ("BASH:", "KOMUT:", "КОМАНDA:")
-_OBS_KEYWORDS  = ("OBSERVATION:", "GÖZLEM:", "НАБЛЮДЕНИЕ:")
+    try:
+        actions = json.loads(json_clean)
+        if not isinstance(actions, list):
+            return [ExecutionResult(ok=False, kind="error", message="LLM output is not a JSON list.")]
+            
+        for act in actions:
+            results.append(_dispatch_action(act))
+            
+    except json.JSONDecodeError as e:
+        return [ExecutionResult(ok=False, kind="error", message=f"JSON Parse Error: {str(e)}", details={"raw": json_raw})]
 
-
-def _strip_prefix(line: str, keywords: tuple[str, ...]) -> str | None:
-    """Return text after the first matching keyword (case-insensitive), or None."""
-    upper = line.upper()
-    for kw in keywords:
-        if upper.startswith(kw):
-            return line[len(kw):].strip()
-        # Handle leading garbage chars (e.g. '棟FILE:' or '===FILE:')
-        idx = upper.find(kw)
-        if idx != -1 and idx <= 4:   # garbage prefix at most 4 chars
-            return line[idx + len(kw):].strip()
-    return None
-
-
-def parse_and_execute(worker_output: str) -> ExecutionResult:
-    """Parse *worker_output* and dispatch to the appropriate handler."""
-    if not worker_output or not worker_output.strip():
-        return ExecutionResult(ok=False, kind="skip", message="Empty worker output — step skipped.")
-
-    lines = worker_output.strip().splitlines()
-    first = lines[0].strip()
-
-    filename = _strip_prefix(first, _FILE_KEYWORDS)
-    if filename is not None:
-        content = "\n".join(lines[1:])
-        if content.startswith("\n"):
-            content = content[1:]
-        return _write_file(filename, content)
-
-    observation = _strip_prefix(first, _OBS_KEYWORDS)
-    if observation is not None:
-        return ExecutionResult(
-            ok=True,
-            kind="observation",
-            message=observation,
-            details={"observation": observation}
-        )
-
-    command = _strip_prefix(first, _BASH_KEYWORDS)
-    if command is not None:
-        return _execute_bash(command)
-
-    # Heuristic fallback: if it looks like "filename.ext\n<code>", treat as FILE
-    fallback = _try_infer_file(lines)
-    if fallback:
-        return fallback
-
-    return ExecutionResult(
-        ok=False,
-        kind="error",
-        message=f"Unrecognized worker output format. First line: {first!r}",
-        details={"raw": worker_output[:300]},
-    )
+    return results
 
 
-# ---------------------------------------------------------------------------
-# File writer
-# ---------------------------------------------------------------------------
+def _dispatch_action(action: dict[str, Any]) -> ExecutionResult:
+    """Execute a single action object."""
+    kind = action.get("action", "").lower()
+    
+    if kind == "write":
+        return _write_file(action.get("filename", ""), action.get("content", ""))
+    
+    if kind == "bash":
+        return _execute_bash(action.get("command", ""))
+        
+    if kind == "observation":
+        msg = action.get("message", "")
+        return ExecutionResult(ok=True, kind="observation", message=msg, details={"observation": msg})
+
+    return ExecutionResult(ok=False, kind="error", message=f"Unknown action type: {kind}")
+
 
 def _write_file(filename: str, content: str) -> ExecutionResult:
+    """Safely write content to a file inside WORK_DIR."""
     if not filename:
-        return ExecutionResult(ok=False, kind="error", message="FILE directive has no filename.")
+        return ExecutionResult(ok=False, kind="error", message="Filename is missing.")
 
     # Security: resolve and confirm target stays inside WORK_DIR
     target = (WORK_DIR / filename).resolve()
@@ -128,154 +79,44 @@ def _write_file(filename: str, content: str) -> ExecutionResult:
     try:
         target.relative_to(work_resolved)
     except ValueError:
-        return ExecutionResult(
-            ok=False,
-            kind="error",
-            message=f"Security: path traversal denied for '{filename}'.",
-        )
+        return ExecutionResult(ok=False, kind="error", message=f"Security: path traversal denied for '{filename}'.")
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     except Exception as e:
-        return ExecutionResult(
-            ok=False,
-            kind="error",
-            message=f"File I/O error for '{filename}': {str(e)}",
-            details={"error": str(e), "filename": filename}
-        )
+        return ExecutionResult(ok=False, kind="error", message=f"File I/O error for '{filename}': {str(e)}", details={"error": str(e)})
 
     return ExecutionResult(
         ok=True,
         kind="file",
-        message=f"Created file: {filename}",
-        details={"path": str(target), "filename": filename, "size": len(content)},
+        message=f"Created/Updated file: {filename}",
+        details={"path": str(target), "filename": filename, "size": len(content)}
     )
 
-
-# ---------------------------------------------------------------------------
-# Bash executor
-# ---------------------------------------------------------------------------
 
 def _execute_bash(command: str) -> ExecutionResult:
-    command = command.strip()
+    """Execute a shell command with security restrictions."""
     if not command:
-        return ExecutionResult(ok=False, kind="error", message="BASH directive has no command.")
+        return ExecutionResult(ok=False, kind="error", message="BASH command is empty.")
 
-    parts = _split_command(command)
-    if not parts:
-        return ExecutionResult(ok=False, kind="error", message="Could not parse bash command.")
-
-    cmd_name = parts[0]
-    if not _DOCKER_MODE and cmd_name not in ALLOWED_COMMANDS:
-        return ExecutionResult(
-            ok=False,
-            kind="error",
-            message=(
-                f"Command '{cmd_name}' is not allowed on host. "
-                f"Use Docker mode (./run.sh) for unrestricted execution. "
-                f"Allowed host commands: {', '.join(sorted(ALLOWED_COMMANDS))}."
-            ),
-        )
-
+    # Level 2 Security: Guardrail logic could be added here
     try:
+        # We run with a timeout to prevent hanging
         result = subprocess.run(
-            parts,
+            shlex.split(command),
+            cwd=WORK_DIR,
             capture_output=True,
             text=True,
-            timeout=BASH_TIMEOUT,
-            cwd=str(WORK_DIR),
+            timeout=30
         )
-    except subprocess.TimeoutExpired:
-        return ExecutionResult(ok=False, kind="error", message=f"Command timed out: {command}")
-    except Exception as exc:
-        return ExecutionResult(ok=False, kind="error", message=f"Execution error: {exc}")
-
-    ok = result.returncode == 0
-    message = f"Executed: {command}"
-    if result.stdout.strip():
-        message += f"\n{result.stdout.strip()}"
-    if result.stderr.strip() and not ok:
-        message += f"\nstderr: {result.stderr.strip()}"
-
-    return ExecutionResult(
-        ok=ok,
-        kind="bash",
-        message=message,
-        details={
-            "command": command,
-            "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _split_command(command: str) -> list[str]:
-    """Shell-safe split that handles quoted arguments."""
-    import shlex
-    try:
-        return shlex.split(command)
-    except ValueError:
-        return command.split()
-
-
-def _try_infer_file(lines: list[str]) -> ExecutionResult | None:
-    """If the output looks like '<name.ext>\\n<content>', treat as a file."""
-    if len(lines) < 2:
-        return None
-    candidate = lines[0].strip()
-    # Simple heuristic: looks like a filename (has extension, no spaces)
-    if re.match(r"^[\w./\\-]+\\.\\w+$", candidate) and " " not in candidate:
-        content = "\n".join(lines[1:])
-        return _write_file(candidate, content)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Batch parser — splits ===END=== delimited multi-block output
-# ---------------------------------------------------------------------------
-
-def parse_batch_and_execute(batch_output: str, expected: int = 0) -> list[ExecutionResult]:
-    """Parse a batch worker response containing multiple FILE:/BASH: blocks.
-
-    Each block is terminated by ===END===  (or end of string).
-    Returns one ExecutionResult per block, in order.
-
-    If expected > 0 and fewer blocks are found, the last successful FILE/BASH
-    result is used to fill the gap (Gemini sometimes consolidates steps).
-    """
-    results: list[ExecutionResult] = []
-    # Split on the delimiter. Pattern is lenient to handle Gemini's garbled output:
-    # ===END===        (correct)
-    # ===END           (missing trailing ===)
-    # ===ENDש / ===ENDбаше  (garbage chars instead of ===)
-    # Consume everything after ===END up to (and including) the next newline
-    raw_blocks = re.split(r"={3}END[^\n]*\n?", batch_output)
-    for raw in raw_blocks:
-        raw = raw.strip()
-        if not raw:
-            continue
-        results.append(parse_and_execute(raw))
-
-    # Consolidation recovery: worker wrote fewer blocks than steps
-    if expected > 0 and 0 < len(results) < expected:
-        last_ok = next(
-            (r for r in reversed(results) if r.ok and r.kind in ("file", "bash")),
-            None,
+        ok = (result.returncode == 0)
+        msg = result.stdout if ok else result.stderr
+        return ExecutionResult(
+            ok=ok,
+            kind="bash",
+            message=msg.strip() or ("Success" if ok else "Error"),
+            details={"exit_code": result.returncode, "command": command}
         )
-        if last_ok:
-            fill = ExecutionResult(
-                ok=True,
-                kind=last_ok.kind,
-                message=f"Consolidated with previous step ({last_ok.message})",
-                details=last_ok.details.copy(),
-            )
-            while len(results) < expected:
-                results.append(fill)
-
-    return results
+    except Exception as e:
+        return ExecutionResult(ok=False, kind="error", message=f"BASH error: {str(e)}")

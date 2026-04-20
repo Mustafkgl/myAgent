@@ -190,28 +190,55 @@ def plan(
     massive_keywords = (
         "RDBMS", "REDIS", "OPERATING SYSTEM", "DATABASE ENGINE", 
         "ENTERPRISE", "DISTRIBUTED", "COMPLEX", "LARGE SCALE",
-        "FULL PROJECT", "COMPLETE SYSTEM"
+        "FULL PROJECT", "COMPLETE SYSTEM", "OS", "KERNEL", "SIMULATION"
     )
     is_massive = any(k in task.upper() for k in massive_keywords)
     
-    # Extra heuristic: if the prompt is very long, it's likely a massive task
-    if len(task) > 500:
+    # Extra heuristic: if the prompt is long, it's likely a massive task
+    if len(task) > 300:
         is_massive = True
     
     if is_massive:
-        if stream_callback:
-            stream_callback("\n[planner] Massive project detected. Generating Roadmap via Gemini...\n")
-        
-        # We use Gemini for the high-level roadmap to save Claude tokens and machine resources
-        from myagent.agent.worker import _gemini_api_batch
         roadmap_prompt = (
             f"Task: {task}\n\n"
             "This project is too large for a single plan. "
             "Output ONLY a ROADMAP line with major components separated by pipes (|).\n"
             "Format: ROADMAP: Comp 1 | Comp 2 | Comp 3 | Comp 4 | Comp 5"
         )
-        try:
-            raw_roadmap = _gemini_api_batch(roadmap_prompt)
+        
+        # ── Roadmap Hierarchy (Intelligence vs Stability) ───────────────────
+        raw_roadmap = None
+        
+        # Option 1: Claude API (The Gold Standard)
+        from myagent.config.auth import ANTHROPIC_API_KEY, GEMINI_API_KEY
+        if ANTHROPIC_API_KEY:
+            if stream_callback:
+                stream_callback("\n[planner] Massive project detected. Generating Roadmap via Claude API (Brain Mode)...\n")
+            try:
+                raw_roadmap = _plan_via_api(roadmap_prompt, stream_callback=None)
+            except Exception as e:
+                if stream_callback: stream_callback(f"\n[planner] Claude API failed: {e}. Trying Gemini...\n")
+
+        # Option 2: Gemini API (The Stable Fallback)
+        if not raw_roadmap and (GEMINI_API_KEY or os.environ.get("GOOGLE_API_KEY")):
+            if stream_callback:
+                stream_callback("\n[planner] Generating Roadmap via Gemini API (Performance Mode)...\n")
+            try:
+                from myagent.agent.worker import _gemini_api_batch
+                raw_roadmap = _gemini_api_batch(roadmap_prompt)
+            except Exception as e:
+                if stream_callback: stream_callback(f"\n[planner] Gemini API failed: {e}. Trying CLI...\n")
+
+        # Option 3: Claude CLI (The Last Resort)
+        if not raw_roadmap:
+            if stream_callback:
+                stream_callback("\n[planner] No API keys found. Forcing Claude CLI into Roadmap mode (Risk of high load)...\n")
+            try:
+                raw_roadmap = _plan_via_cli(roadmap_prompt, roadmap=True)
+            except Exception as e:
+                if stream_callback: stream_callback(f"\n[planner] Roadmap failed: {e}. Falling back to normal mode.\n")
+
+        if raw_roadmap:
             roadmap_match = re.search(r"ROADMAP:\s*(.+)", raw_roadmap, re.IGNORECASE)
             if roadmap_match:
                 components = [c.strip() for c in roadmap_match.group(1).split("|")]
@@ -223,16 +250,13 @@ def plan(
                 for comp in components:
                     if stream_callback:
                         stream_callback(f"\n[planner] Planning component: {comp}...\n")
-                    # Claude plans each component individually
+                    # Recursive plan for each component
                     comp_steps, comp_int = plan(f"Plan for component: {comp} (Part of task: {task})", 
                                                 verbose=False, stream_callback=stream_callback)
                     all_steps.extend(comp_steps)
                     if comp_int: all_interfaces.append(comp_int)
                 
                 return all_steps[:20], "\n".join(all_interfaces)
-        except Exception as e:
-            if stream_callback:
-                stream_callback(f"\n[planner] Gemini roadmap failed: {e}. Falling back to normal mode.\n")
 
     context = _build_context()
     research = _run_research(task, stream_callback=stream_callback)

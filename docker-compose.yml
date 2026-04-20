@@ -22,6 +22,7 @@ services:
       # API keys — optional, CLI OAuth (mounted above) is used if not set
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GEMINI_API_KEY:-}
       # Pass terminal color capabilities from host to container
       - TERM=${TERM:-xterm-256color}
       - COLORTERM=${COLORTERM:-truecolor}

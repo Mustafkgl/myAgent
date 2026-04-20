@@ -32,6 +32,10 @@ CONFIG_PATH: Path = Path.home() / ".myagent" / "config.json"
 # Module-level runtime overrides — populated by apply_overrides() from CLI args
 _overrides: dict[str, str] = {}
 
+# API Keys — initialized once at startup from environment
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", os.environ.get("GOOGLE_API_KEY", "")).strip()
+
 
 # ---------------------------------------------------------------------------
 # Runtime override (CLI flags)

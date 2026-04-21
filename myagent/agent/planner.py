@@ -133,8 +133,13 @@ def plan(
                 components = [c.strip() for c in m.group(1).split("|")]
                 all_steps = []
                 for comp in components:
-                    s, _ = plan(f"Plan for component: {comp} (Part of task: {task})", stream_callback=stream_callback)
-                    all_steps.extend(s)
+                    if stream_callback:
+                        stream_callback(f"\n[planner] Planning component: {comp}...\n")
+                    # FIX: Pass stream_callback to recursive plan calls!
+                    comp_steps, comp_int = plan(f"Plan for component: {comp} (Part of task: {task})", 
+                                                verbose=False, stream_callback=stream_callback)
+                    all_steps.extend(comp_steps)
+                    if comp_int: all_interfaces.append(comp_int)
                 return all_steps[:20], ""
 
     # Normal Planning

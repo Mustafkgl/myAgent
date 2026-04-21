@@ -12,6 +12,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from myagent.utils.logger import log
 
 from myagent.config.settings import WORK_DIR
 
@@ -26,6 +27,7 @@ class ExecutionResult:
 
 def parse_batch_and_execute(json_raw: str, expected: int = 0) -> list[ExecutionResult]:
     """Parse a JSON list of actions and execute them in order."""
+    log.debug(f"Parsing batch JSON (expected {expected} actions).")
     results: list[ExecutionResult] = []
     
     # Try to clean up markdown if LLM ignored the rules
@@ -39,12 +41,17 @@ def parse_batch_and_execute(json_raw: str, expected: int = 0) -> list[ExecutionR
     try:
         actions = json.loads(json_clean)
         if not isinstance(actions, list):
+            log.error("LLM output is not a JSON list.")
             return [ExecutionResult(ok=False, kind="error", message="LLM output is not a JSON list.")]
             
-        for act in actions:
+        log.info(f"Successfully parsed {len(actions)} actions from JSON.")
+        for i, act in enumerate(actions, 1):
+            log.debug(f"Executing Action {i}/{len(actions)}: {act.get('action')}")
             results.append(_dispatch_action(act))
             
     except json.JSONDecodeError as e:
+        log.error(f"JSON Decode Error: {str(e)}")
+        log.debug(f"Raw problematic JSON: {json_raw}")
         return [ExecutionResult(ok=False, kind="error", message=f"JSON Parse Error: {str(e)}", details={"raw": json_raw})]
 
     return results
@@ -62,14 +69,17 @@ def _dispatch_action(action: dict[str, Any]) -> ExecutionResult:
         
     if kind == "observation":
         msg = action.get("message", "")
+        log.info(f"LLM Observation: {msg}")
         return ExecutionResult(ok=True, kind="observation", message=msg, details={"observation": msg})
 
+    log.warning(f"Unknown action type received: {kind}")
     return ExecutionResult(ok=False, kind="error", message=f"Unknown action type: {kind}")
 
 
 def _write_file(filename: str, content: str) -> ExecutionResult:
     """Safely write content to a file inside WORK_DIR."""
     if not filename:
+        log.error("Write failed: Filename missing.")
         return ExecutionResult(ok=False, kind="error", message="Filename is missing.")
 
     # Security: resolve and confirm target stays inside WORK_DIR
@@ -79,12 +89,15 @@ def _write_file(filename: str, content: str) -> ExecutionResult:
     try:
         target.relative_to(work_resolved)
     except ValueError:
+        log.error(f"Security violation: path traversal attempt for '{filename}'")
         return ExecutionResult(ok=False, kind="error", message=f"Security: path traversal denied for '{filename}'.")
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+        log.info(f"File Written: {filename} ({len(content)} bytes)")
     except Exception as e:
+        log.exception(f"File I/O error for '{filename}'")
         return ExecutionResult(ok=False, kind="error", message=f"File I/O error for '{filename}': {str(e)}", details={"error": str(e)})
 
     return ExecutionResult(
@@ -98,11 +111,11 @@ def _write_file(filename: str, content: str) -> ExecutionResult:
 def _execute_bash(command: str) -> ExecutionResult:
     """Execute a shell command with security restrictions."""
     if not command:
+        log.error("BASH failed: Command empty.")
         return ExecutionResult(ok=False, kind="error", message="BASH command is empty.")
 
-    # Level 2 Security: Guardrail logic could be added here
+    log.info(f"Executing BASH: {command}")
     try:
-        # We run with a timeout to prevent hanging
         result = subprocess.run(
             shlex.split(command),
             cwd=WORK_DIR,
@@ -112,6 +125,13 @@ def _execute_bash(command: str) -> ExecutionResult:
         )
         ok = (result.returncode == 0)
         msg = result.stdout if ok else result.stderr
+        
+        if ok:
+            log.debug(f"BASH Success: {command}")
+        else:
+            log.warning(f"BASH Failed (code {result.returncode}): {command}")
+            log.debug(f"BASH Stderr: {result.stderr}")
+
         return ExecutionResult(
             ok=ok,
             kind="bash",
@@ -119,4 +139,5 @@ def _execute_bash(command: str) -> ExecutionResult:
             details={"exit_code": result.returncode, "command": command}
         )
     except Exception as e:
+        log.error(f"Subprocess crash for: {command} - Error: {str(e)}")
         return ExecutionResult(ok=False, kind="error", message=f"BASH error: {str(e)}")

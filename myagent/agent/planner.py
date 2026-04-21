@@ -8,6 +8,7 @@ import ast
 import os
 import re
 from pathlib import Path
+from myagent.utils.logger import log
 
 from myagent.config.auth import ANTHROPIC_API_KEY, GEMINI_API_KEY, CLI, API, get_claude_mode
 from myagent.config.settings import PROMPTS_DIR, WORK_DIR
@@ -23,6 +24,7 @@ def _system_prompt() -> str:
 
 def _build_context() -> str:
     """Build a compact codebase context for the planner."""
+    log.debug("Building codebase context...")
     parts: list[str] = []
     tree = _dir_tree(WORK_DIR, max_depth=3)
     if tree:
@@ -69,12 +71,14 @@ def _symbol_map(root: Path) -> str:
 
 def _ripgrep(pattern: str, include_pattern: str = None) -> str:
     import subprocess
+    log.debug(f"Searching for pattern: {pattern}")
     cmd = ["rg", "--max-count", "20", "--line-number", "--color", "never", pattern]
     if include_pattern: cmd.extend(["-g", include_pattern])
     try:
         result = subprocess.run(cmd, cwd=WORK_DIR, capture_output=True, text=True, timeout=5)
         return result.stdout if result.returncode == 0 else f"No results found for: {pattern}"
     except Exception as e:
+        log.error(f"ripgrep failed: {str(e)}")
         return f"Search error: {str(e)}"
 
 def _run_research(task: str, stream_callback=None) -> str:
@@ -100,6 +104,7 @@ def plan(
     stream_callback=None,
     session_context: str = "",
 ) -> tuple[list[str], str]:
+    log.info(f"Starting planning phase for task: {task[:50]}...")
     mode = get_claude_mode()
     
     # ── Complexity Detection & Roadmap
@@ -113,33 +118,34 @@ def plan(
         if ANTHROPIC_API_KEY:
             if stream_callback: stream_callback("\n[planner] Massive project: Generating Roadmap via Claude API...\n")
             try: raw_roadmap = _plan_via_api(roadmap_prompt)
-            except Exception: pass
+            except Exception as e:
+                log.warning(f"Claude API roadmap failed: {str(e)}")
 
         if not raw_roadmap and GEMINI_API_KEY:
             if stream_callback: stream_callback("\n[planner] Roadmap via Gemini API...\n")
             try:
                 from myagent.agent.worker import _gemini_api_batch
                 raw_roadmap = _gemini_api_batch(roadmap_prompt)
-            except Exception: pass
+            except Exception as e:
+                log.warning(f"Gemini API roadmap failed: {str(e)}")
 
         if not raw_roadmap:
             if stream_callback: stream_callback("\n[planner] Roadmap via Claude CLI...\n")
             try: raw_roadmap = _plan_via_cli(roadmap_prompt, roadmap=True)
-            except Exception: pass
+            except Exception as e:
+                log.error(f"Claude CLI roadmap failed: {str(e)}")
 
         if raw_roadmap:
             m = re.search(r"ROADMAP:\s*(.+)", raw_roadmap, re.IGNORECASE)
             if m:
                 components = [c.strip() for c in m.group(1).split("|")]
+                log.info(f"Recursive Roadmap detected: {components}")
                 all_steps = []
                 for comp in components:
                     if stream_callback:
                         stream_callback(f"\n[planner] Planning component: {comp}...\n")
-                    # FIX: Pass stream_callback to recursive plan calls!
-                    comp_steps, comp_int = plan(f"Plan for component: {comp} (Part of task: {task})", 
-                                                verbose=False, stream_callback=stream_callback)
-                    all_steps.extend(comp_steps)
-                    if comp_int: all_interfaces.append(comp_int)
+                    s, _ = plan(f"Plan for component: {comp} (Part of task: {task})", stream_callback=stream_callback)
+                    all_steps.extend(s)
                 return all_steps[:20], ""
 
     # Normal Planning
@@ -147,18 +153,30 @@ def plan(
     research = _run_research(task, stream_callback=stream_callback)
     full_prompt = f"{task}\n\nResearch:\n{research}\n\nContext:\n{context}\n\nSession:\n{session_context}"
 
-    if mode == CLI:
-        raw = _plan_via_cli(full_prompt, stream_callback=stream_callback)
-    else:
-        raw = _plan_via_api(full_prompt, stream_callback=stream_callback)
+    try:
+        if mode == CLI:
+            raw = _plan_via_cli(full_prompt, stream_callback=stream_callback)
+        else:
+            raw = _plan_via_api(full_prompt, stream_callback=stream_callback)
+    except RuntimeError as e:
+        # Extract the real error message from the prefix if it exists
+        err_msg = str(e)
+        if "__CLAUDE_ERROR__:" in err_msg:
+            real_cause = err_msg.split("__CLAUDE_ERROR__:", 1)[1]
+            log.error(f"Detailed Planning Failure: {real_cause}")
+            raise RuntimeError(f"Claude planning failed. Reason: {real_cause}")
+        raise
 
     from myagent.config.auth import get_max_steps
     steps = _parse_steps(raw)[:get_max_steps()]
+    log.info(f"Planning complete. Generated {len(steps)} steps.")
     return steps, _extract_interface(raw)
 
 
 def _plan_via_api(task: str, stream_callback=None) -> str:
-    if not ANTHROPIC_API_KEY: raise RuntimeError("ANTHROPIC_API_KEY missing.")
+    if not ANTHROPIC_API_KEY: 
+        log.error("API mode selected but ANTHROPIC_API_KEY is missing.")
+        raise RuntimeError("ANTHROPIC_API_KEY missing.")
     import anthropic
     from myagent.agent.tokens import tracker
     from myagent.config.auth import get_claude_model
@@ -184,7 +202,8 @@ def _plan_via_cli(task: str, stream_callback=None, roadmap: bool = False) -> str
     cmd = ["claude", "-p", task, "--model", model]
     if roadmap: cmd.extend(["--max-steps", "1"])
     out = run_claude_cli(cmd, task, model, timeout=120, stream_callback=stream_callback)
-    if is_error(out): raise RuntimeError("Claude CLI planning failed.")
+    if is_error(out):
+        raise RuntimeError(out) # Will be caught and parsed in plan()
     return out
 
 

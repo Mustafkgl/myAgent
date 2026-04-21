@@ -1,5 +1,5 @@
 """
-Pipeline — Level 2 Clean Architecture.
+Pipeline — Level 2 Clean Architecture with Deep Logging.
 Uses a State Machine to orchestrate Clarify → Plan → Execute → Review → Verify.
 """
 
@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
+from myagent.utils.logger import log
 
 from myagent.agent.executor import ExecutionResult, parse_batch_and_execute
 from myagent.agent.planner import plan
@@ -58,8 +59,9 @@ class PipelineContext:
         self.ui = ui
         self.verbose = verbose
         self.result = RunResult(task, task)
+        self.session_id = new_session_id()
         self.state = PipelineState(
-            session_id=new_session_id(),
+            session_id=self.session_id,
             task=task,
             work_dir=str(WORK_DIR),
             phase="started",
@@ -67,6 +69,7 @@ class PipelineContext:
         )
         self.steps: list[str] = []
         self.interface_contract: str = ""
+        log.info(f"Pipeline Context Initialized. Session: {self.session_id} | Task: {task[:100]}")
 
 
 class PipelinePhase(ABC):
@@ -83,59 +86,96 @@ class PipelinePhase(ABC):
 
 class PlanningPhase(PipelinePhase):
     def run(self, ctx: PipelineContext) -> str | None:
-        with ctx.ui.streaming("Claude is planning...", color="medium_purple1") as write:
-            steps, interface = plan(ctx.task, verbose=ctx.verbose, stream_callback=write)
-        
-        if not steps:
-            ctx.result.success = False
-            ctx.result.summary_en = "Failed to generate a plan."
-            return None
+        log.info("Entering PLANNING phase.")
+        try:
+            with ctx.ui.streaming("Claude is planning...", color="medium_purple1") as write:
+                steps, interface = plan(ctx.task, verbose=ctx.verbose, stream_callback=write)
+            
+            if not steps:
+                log.error("Planning failed: No steps generated.")
+                ctx.result.success = False
+                ctx.result.summary_en = "Failed to generate a plan."
+                return None
 
-        ctx.steps = steps
-        ctx.interface_contract = interface
-        ctx.result.plan_steps = steps
-        set_interface_contract(interface)
-        ctx.ui.plan_done(steps)
-        
-        # Human-in-the-loop
-        if not ctx.ui.ask_approval():
-            ctx.result.summary_en = "Plan rejected by user."
-            ctx.result.success = False
-            return None
+            ctx.steps = steps
+            ctx.interface_contract = interface
+            ctx.result.plan_steps = steps
+            set_interface_contract(interface)
+            ctx.ui.plan_done(steps)
+            log.info(f"Plan generated successfully: {len(steps)} steps.")
+            
+            # Human-in-the-loop
+            log.debug("Awaiting user approval for plan...")
+            if not ctx.ui.ask_approval():
+                log.info("User rejected the plan.")
+                ctx.result.summary_en = "Plan rejected by user."
+                ctx.result.success = False
+                return None
 
-        return "execution"
+            log.info("User approved the plan. Moving to EXECUTION.")
+            return "execution"
+
+        except Exception as e:
+            log.exception(f"Fatal error during Planning phase: {str(e)}")
+            ctx.ui.raw("Planning Error", str(e), color="red1")
+            ctx.result.success = False
+            ctx.result.summary_en = f"Planning Error: {str(e)}"
+            return None
 
 
 class ExecutionPhase(PipelinePhase):
     def run(self, ctx: PipelineContext) -> str | None:
-        with ctx.ui.streaming(f"Gemini is executing — {len(ctx.steps)} steps...", color="dodger_blue1") as write:
-            worker_out = execute_all_steps(ctx.steps, ctx.task, verbose=ctx.verbose, stream_callback=write)
-        
-        # LEVEL 2: Structured JSON parsing
-        exec_results = parse_batch_and_execute(worker_out, expected=len(ctx.steps))
-        
-        seen_files = set()
-        for i, (step_desc, res) in enumerate(zip(ctx.steps, exec_results), 1):
-            ctx.result.steps.append(StepRecord(i, step_desc, worker_out, res))
-            if res.kind == "file" and "filename" in res.details:
-                seen_files.add(res.details["filename"])
-            if not res.ok:
-                ctx.result.success = False
+        log.info(f"Entering EXECUTION phase. Executing {len(ctx.steps)} steps.")
+        try:
+            with ctx.ui.streaming(f"Gemini is executing — {len(ctx.steps)} steps...", color="dodger_blue1") as write:
+                worker_out = execute_all_steps(ctx.steps, ctx.task, verbose=ctx.verbose, stream_callback=write)
+            
+            log.debug(f"Worker Output Captured. Length: {len(worker_out)} chars.")
+            
+            # LEVEL 2: Structured JSON parsing
+            exec_results = parse_batch_and_execute(worker_out, expected=len(ctx.steps))
+            log.info(f"Execution finished. Parsed {len(exec_results)} results.")
+            
+            seen_files = set()
+            for i, (step_desc, res) in enumerate(zip(ctx.steps, exec_results), 1):
+                log.debug(f"Step {i} Result: {res.kind} | OK={res.ok} | Msg: {res.message[:50]}")
+                ctx.result.steps.append(StepRecord(i, step_desc, worker_out, res))
+                
+                # Check for autonomous loop trigger (OBSERVATION)
+                if res.kind == "observation":
+                    log.info(f"Observation detected at Step {i}: {res.message}. Triggering RE-PLAN.")
+                    ctx.task = f"Gözlem: {res.message}\nÖnceki plandan kalanlar: {ctx.steps[i-1:]}\nLütfen stratejiyi uyarla."
+                    return "planning"
 
-        ctx.result.created_files = list(seen_files)
-        ctx.ui.exec_results(ctx.steps, exec_results)
-        
-        return "summary"
+                if res.kind == "file" and "filename" in res.details:
+                    seen_files.add(res.details["filename"])
+                
+                if not res.ok:
+                    log.warning(f"Step {i} failed: {res.message}")
+                    ctx.result.success = False
+
+            ctx.result.created_files = list(seen_files)
+            ctx.ui.exec_results(ctx.steps, exec_results)
+            log.info(f"Execution cycle complete. Created {len(seen_files)} files.")
+            
+            return "summary"
+
+        except Exception as e:
+            log.exception(f"Fatal error during Execution phase: {str(e)}")
+            ctx.result.success = False
+            return None
 
 
 class SummaryPhase(PipelinePhase):
     def run(self, ctx: PipelineContext) -> str | None:
+        log.info("Entering SUMMARY phase.")
         ctx.ui.summary(
             success=ctx.result.success,
             review_approved=ctx.result.review_approved,
-            n_review_rounds=0, # Simplified for first Level 2 pass
+            n_review_rounds=0, 
             created_files=ctx.result.created_files
         )
+        log.info(f"Task Finalized. Success: {ctx.result.success} | Files: {ctx.result.created_files}")
         return None
 
 
@@ -158,12 +198,16 @@ class PipelineOrchestrator:
         ctx = PipelineContext(task, ui, verbose)
         current_phase_name = "planning"
 
+        log.info("--- PIPELINE START ---")
         while current_phase_name:
             phase = self.phases.get(current_phase_name)
             if not phase:
+                log.error(f"Invalid Phase transition: {current_phase_name}")
                 break
+            log.debug(f"Transitioning to Phase: {current_phase_name}")
             current_phase_name = phase.run(ctx)
 
+        log.info("--- PIPELINE END ---")
         return ctx.result
 
 

@@ -196,7 +196,20 @@ class TuiAgentUI(AgentUI):
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
         self._update_sidebar("pipeline-status", Text(f"⏳ {label}", style=f"bold {color}"))
-        yield lambda x: None
+        
+        def write(chunk: str):
+            def _append():
+                try:
+                    w = self.app.query_one("#pipeline-logs", Static)
+                    current = str(w.renderable)
+                    # Keep only the last 10 lines to prevent sidebar bloat
+                    lines = (current + chunk).split("\n")[-10:]
+                    w.update(Text("\n".join(lines), style="grey50"))
+                except Exception:
+                    pass
+            self.app.call_from_thread(_append)
+
+        yield write
     @contextmanager
     def spinner(self, label: str, color: str = C_DIM):
         self._update_sidebar("pipeline-status", Text(f"⚙️ {label}", style=f"bold {color}"))

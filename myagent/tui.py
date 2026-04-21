@@ -1,5 +1,6 @@
 """
-myagent TUI — Level 2 Clean Architecture (English Edition)
+myagent TUI — Level 2 Clean Architecture (Full English Edition)
+Includes Autocomplete, Slash Commands, State Machine, and Deep Logging.
 """
 
 from __future__ import annotations
@@ -54,6 +55,7 @@ from myagent.agent.sessions import (
     trash_list,
 )
 from myagent.ui import AgentUI, C_CLAUDE, C_DIM, C_GEMINI, C_OK, C_WARN, C_ERR
+from myagent.utils.logger import log
 
 if TYPE_CHECKING:
     from myagent.cli import SessionState
@@ -97,7 +99,6 @@ class SettingsModal(ModalScreen):
     def compose(self) -> ComposeResult:
         from myagent.config.auth import get_claude_model, get_gemini_model
         from myagent.models import CLAUDE_CURATED, GEMINI_CURATED
-        
         yield Grid(
             Label("🔧 SETTINGS", id="modal-title"),
             Horizontal(Label("Claude Model:"), Select([(m.id, m.id) for m in CLAUDE_CURATED], value=get_claude_model(), id="claude-model"), classes="setting-row"),
@@ -113,7 +114,7 @@ class SettingsModal(ModalScreen):
     def cancel(self) -> None: self.dismiss(False)
 
 class CopyModal(ModalScreen):
-    """A modal for text selection."""
+    """A modal that displays the session text in a selectable TextArea."""
     def __init__(self, content: str):
         super().__init__()
         self.content = content
@@ -131,6 +132,7 @@ class CopyModal(ModalScreen):
     def on_mount(self) -> None: self.query_one("#copy-area").focus()
     BINDINGS = [("escape", "dismiss", "Back")]
 
+
 # ---------------------------------------------------------------------------
 # Slash commands registry
 # ---------------------------------------------------------------------------
@@ -142,16 +144,22 @@ _COMMANDS: list[tuple[str, str]] = [
     ("/compact",  "Compress history"),
     ("/config",   "Show configuration"),
     ("/doctor",   "System diagnostics"),
+    ("/editor",   "Open external editor for multi-line input"),
     ("/exit",     "Exit application"),
     ("/export",   "Export to Markdown"),
     ("/help",     "Show help"),
+    ("/delete",   "Move session to trash"),
     ("/load",     "Load session <id>"),
     ("/model",    "Model selection"),
     ("/new",      "New session"),
+    ("/rename",   "Rename session"),
+    ("/restore",  "Restore from trash"),
     ("/sessions", "List sessions"),
     ("/status",   "Session stats"),
     ("/theme",    "Toggle dark/light"),
+    ("/trash",    "Show trash"),
 ]
+
 
 # ---------------------------------------------------------------------------
 # TUI Bridge
@@ -161,28 +169,43 @@ class TuiAgentUI(AgentUI):
     def __init__(self, app: "MyAgentApp"):
         super().__init__(verbose=app.verbose)
         self.app = app
-    def _log(self, renderable: Any) -> None: self.app.call_from_thread(self.app.log_message, renderable)
+
+    def _log(self, renderable: Any) -> None:
+        self.app.call_from_thread(self.app.log_message, renderable)
+
     def _update_sidebar(self, widget_id: str, content: Any) -> None:
         def update():
-            try: self.app.query_one(f"#{widget_id}", Static).update(content)
+            try:
+                w = self.app.query_one(f"#{widget_id}", Static)
+                w.update(content)
             except Exception: pass
         self.app.call_from_thread(update)
+
     def header(self, task: str, cm: str, gm: str) -> None:
         self._log(Rule(f"[{C_CLAUDE}]{task}[/]", style=C_DIM))
         self._update_sidebar("pipeline-status", Text(f"🚀 Task Started\n{task[:30]}...", style="bold green"))
+        self._update_sidebar("pipeline-steps", "")
+        self._update_sidebar("pipeline-logs", "")
+
     def plan_done(self, steps: list[str]) -> None:
         sidebar_t = Text("📋 Planned Steps:\n", style="bold #c084fc")
-        for i, s in enumerate(steps, 1): sidebar_t.append(f"  {i}. {s[:35]}...\n", style="white")
+        for i, s in enumerate(steps, 1):
+            sidebar_t.append(f"  {i}. {s[:35]}...\n", style="white")
         self._update_sidebar("pipeline-steps", sidebar_t)
+
     def exec_results(self, steps: list[str], results: list[Any]) -> None:
         t = Text("\n  Execution Results:\n", style=C_GEMINI)
         for i, (step, r) in enumerate(zip(steps, results), 1):
             t.append(f"    {i}. {'✓' if r.ok else '✗'} {r.message}\n", style=C_OK if r.ok else C_ERR)
         self._log(t)
-    def chat_answer(self, text: str) -> None: self.app._last_answer = text
+
+    def chat_answer(self, text: str) -> None:
+        self.app._last_answer = text
+
     def summary(self, success: bool, review: bool, n: int, files: list[str]) -> None:
         status = "✓ Completed" if success else "✗ Failed"
         self._update_sidebar("pipeline-status", Text(status, style=f"bold {C_OK if success else C_ERR}"))
+
     def ask_approval(self) -> bool:
         self.app._approval_event = asyncio.Event()
         self.app._approval_result = False
@@ -193,27 +216,26 @@ class TuiAgentUI(AgentUI):
         loop = self.app.call_from_thread(asyncio.get_running_loop)
         asyncio.run_coroutine_threadsafe(self.app._approval_event.wait(), loop).result()
         return self.app._approval_result
+
     @contextmanager
     def streaming(self, label: str, color: str = C_DIM):
         self._update_sidebar("pipeline-status", Text(f"⏳ {label}", style=f"bold {color}"))
-        
         def write(chunk: str):
             def _append():
                 try:
                     w = self.app.query_one("#pipeline-logs", Static)
                     current = str(w.renderable)
-                    # Keep only the last 10 lines to prevent sidebar bloat
                     lines = (current + chunk).split("\n")[-10:]
                     w.update(Text("\n".join(lines), style="grey50"))
-                except Exception:
-                    pass
+                except Exception: pass
             self.app.call_from_thread(_append)
-
         yield write
+
     @contextmanager
     def spinner(self, label: str, color: str = C_DIM):
         self._update_sidebar("pipeline-status", Text(f"⚙️ {label}", style=f"bold {color}"))
         yield
+
 
 # ---------------------------------------------------------------------------
 # Main App
@@ -238,11 +260,12 @@ class MyAgentApp(App):
     Screen { background: $surface; }
     #main-container { height: 1fr; }
     #file-tree { width: 20%; min-width: 25; background: $panel; border-right: solid $primary; }
-    #chat-log { width: 1fr; min-width: 40; padding: 0 2; }
+    #chat-log { width: 1fr; min-width: 40; padding: 0 2; scrollbar-size-vertical: 0; }
     #pipeline-sidebar { width: 25%; min-width: 30; background: $panel; border-left: solid $primary; padding: 1 2; }
     #sidebar-title { text-align: center; text-style: bold; width: 100%; background: $primary; color: white; margin-bottom: 1; }
-    #pipeline-status { margin-bottom: 1; }
-    #autocomplete { display: none; max-height: 10; border: solid $primary; background: $panel; }
+    #pipeline-status { margin-bottom: 1; min-height: 2; }
+    #pipeline-logs { color: $text-disabled; }
+    #autocomplete { display: none; max-height: 10; border: solid $primary; background: $panel; z-index: 10; }
     #input-container { height: 3; dock: bottom; border-top: solid $primary; padding: 0 1; }
     Input { border: none; background: $surface; width: 1fr; }
     .input-prompt { color: $primary; text-style: bold; width: 4; }
@@ -265,6 +288,8 @@ class MyAgentApp(App):
         self.ui_bridge = TuiAgentUI(self)
         self._approval_event: asyncio.Event | None = None
         self._approval_result: bool = False
+        self._sid = str(uuid.uuid4())
+        self._sname = datetime.now().strftime("%d %b %Y %H:%M")
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -303,28 +328,82 @@ class MyAgentApp(App):
         self.chat_log.mount(Static(renderable))
         self.chat_log.scroll_end(animate=False)
 
+    # ── Autocomplete ──────────────────────────────────────────────────────────
+
+    @on(Input.Changed, "#user-input")
+    def on_input_changed(self, event: Input.Changed) -> None:
+        text = event.value
+        ac = self.query_one("#autocomplete", OptionList)
+        if not text.startswith("/"): ac.display = False; return
+        query = text.lower()
+        matches = [(cmd, desc) for cmd, desc in _COMMANDS if cmd.startswith(query)]
+        if not matches: ac.display = False; return
+        ac.clear_options()
+        for cmd, desc in matches: ac.add_option(Option(f"{cmd}  [dim]{desc}[/dim]", id=cmd))
+        ac.display = True; ac.highlighted = 0
+
+    @on(OptionList.OptionSelected, "#autocomplete")
+    def on_autocomplete_selected(self, event: OptionList.OptionSelected) -> None:
+        self._complete_autocomplete(event.option.id)
+
+    def _complete_autocomplete(self, cmd: str) -> None:
+        inp = self.query_one("#user-input", PromptInput)
+        inp.value = cmd + " "; inp.cursor_position = len(inp.value)
+        self.query_one("#autocomplete", OptionList).display = False
+        inp.focus()
+
+    # ── Key Handling ──────────────────────────────────────────────────────────
+
+    def on_key(self, event: Key) -> None:
+        ac = self.query_one("#autocomplete", OptionList)
+        if ac.display and ac.option_count > 0:
+            if event.key == "up": event.prevent_default(); ac.highlighted = max(0, (ac.highlighted or 0) - 1)
+            elif event.key == "down": event.prevent_default(); ac.highlighted = min(ac.option_count - 1, (ac.highlighted or 0) + 1)
+            elif event.key in ("tab", "enter"): event.prevent_default(); self._complete_autocomplete(ac.get_option_at_index(ac.highlighted).id)
+            elif event.key == "escape": ac.display = False
+
+    # ── Input Submit ──────────────────────────────────────────────────────────
+
     @on(Input.Submitted)
     async def handle_input(self, event: Input.Submitted) -> None:
         text = event.value.strip()
         if not text: return
-        
         inp = self.query_one("#user-input", PromptInput)
-        
         if self._approval_event and not self._approval_event.is_set():
-            inp.value = ""
-            self._approval_result = text.lower() in ("y", "yes", "ok", "")
+            inp.value = ""; self._approval_result = text.lower() in ("y", "yes", "ok", "")
             self._approval_event.set(); return
-            
-        inp.value = ""
+        inp.value = ""; self.query_one("#autocomplete", OptionList).display = False
         if text.startswith("/"):
             parts = text[1:].split(maxsplit=1)
             await self._cmd(parts[0].lower(), parts[1] if len(parts) > 1 else "")
-        else:
-            self._show_user(text)
-            self.process_chat(text)
+        else: self._show_user(text); self.process_chat(text)
 
     def _show_user(self, text: str) -> None:
         self.log_message(Text.assemble(("\n  ", ""), ("You  ", f"bold {C_GEMINI}"), (text, "bold white"), ("\n", "")))
+
+    # ── Commands ──────────────────────────────────────────────────────────────
+
+    async def _cmd(self, cmd: str, arg: str) -> None:
+        log.info(f"Executing command: /{cmd} with arg: {arg}")
+        if cmd in ("exit", "quit"): self.exit()
+        elif cmd == "clear": self.chat_log.remove_children()
+        elif cmd == "status": self._cmd_status()
+        elif cmd == "theme":
+            self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
+            self.log_message(Text(f"  ✓ Theme: {self.theme}\n", style=C_OK))
+        elif cmd == "sessions": self._show_sessions()
+        elif cmd == "load": await self._load_session(arg)
+        elif cmd == "auth": 
+            from myagent.auth_screen import AuthScreen
+            self.push_screen(AuthScreen())
+        elif cmd == "model":
+            from myagent.model_screen import ModelScreen
+            self.push_screen(ModelScreen())
+        elif cmd == "doctor": self._perform_health_check()
+        else:
+            self._show_user(f"/{cmd} {arg}"); self._run_pipeline(f"{cmd} {arg}".strip())
+
+    # ── Implementations ───────────────────────────────────────────────────────
 
     async def _run_pipeline(self, task: str) -> None:
         from myagent.agent.pipeline import run
@@ -337,6 +416,7 @@ class MyAgentApp(App):
             color = C_OK if result.success else C_ERR
             self.log_message(Text.assemble(("\n  " + icon + " ", f"bold {color}"), (f"{elapsed:.1f}s  files: ", "dim"), (", ".join(result.created_files[:4]) or "—" + "\n", "white")))
         except Exception as e:
+            log.exception(f"Pipeline crashed for task: {task}")
             self.log_message(Text(f"\n  ✗ Error: {e}\n", style=f"bold {C_ERR}"))
 
     @work(exclusive=True, group="ai")
@@ -346,23 +426,38 @@ class MyAgentApp(App):
         if route.action == "answer":
             self._last_answer = route.answer
             self.log_message(Text.assemble(("  Claude\n", f"bold {C_CLAUDE}")))
-            self.log_message(Markdown(route.answer))
-            self.log_message(Text(""))
+            self.log_message(Markdown(route.answer)); self.log_message(Text(""))
             self._msgs.append({"role": "user", "text": text})
             self._msgs.append({"role": "assistant", "text": route.answer})
         else: await self._run_pipeline(route.task or text)
 
-    async def _cmd(self, cmd: str, arg: str) -> None:
-        if cmd in ("exit", "quit"): self.exit()
-        elif cmd == "clear": self.chat_log.remove_children()
-        elif cmd == "status": self._cmd_status()
-        elif cmd == "theme":
-            self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
-            self.log_message(Text(f"  ✓ Theme: {self.theme}\n", style=C_OK))
-        else: self._show_user(f"/{cmd} {arg}"); self._run_pipeline(f"{cmd} {arg}".strip())
-
     def _cmd_status(self) -> None:
         self.log_message(Text.assemble(("\n  Session Status\n", f"bold {C_CLAUDE}"), ("  Theme:      ", "dim"), (f"{self.theme}\n", "white")))
+
+    def _show_sessions(self) -> None:
+        sessions = _sessions_list()
+        t = Text(f"\n  Sessions ({len(sessions)}):\n\n", style=f"bold {C_CLAUDE}")
+        for i, s in enumerate(sessions[:10], 1):
+            t.append(f"  [{i}] {s.get('updated_at',' ')[:16]} id:{s.get('id','')[:8]}\n", style=C_DIM)
+            t.append(f"      {s.get('topic','No topic')[:60]}\n", style="italic")
+        self.log_message(t)
+
+    async def _load_session(self, arg: str) -> None:
+        sessions = _sessions_list()
+        data = _resolve_session(arg, sessions)
+        if not data: self.log_message(Text(f"  Session not found: {arg}\n", style=C_ERR)); return
+        self.chat_log.remove_children(); self._sid = data["id"]; self._msgs = data.get("messages", [])
+        self.session.chat.load_history(self._msgs)
+        for m in self._msgs:
+            if m["role"] == "user": self._show_user(m["text"])
+            else: self.log_message(Text("  Claude\n", style=f"bold {C_CLAUDE}")); self.log_message(Markdown(m["text"])); self.log_message(Text(""))
+
+    def _perform_health_check(self) -> None:
+        from rich.table import Table
+        results = run_diagnostics()
+        table = Table.grid(padding=(0, 2))
+        for cat, status, msg in results: table.add_row(cat, Text(status, style="bold"), Text(msg))
+        self.log_message(table)
 
 def start_tui(session: "SessionState", verbose: bool = False) -> None:
     app = MyAgentApp(session, verbose=verbose)

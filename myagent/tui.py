@@ -60,6 +60,11 @@ from myagent.utils.logger import log
 if TYPE_CHECKING:
     from myagent.cli import SessionState
 
+# ---------------------------------------------------------------------------
+# Session helpers
+# ---------------------------------------------------------------------------
+_sessions_list = _sessions_list_new
+_sessions_save = _sessions_save_new
 
 # ---------------------------------------------------------------------------
 # Components

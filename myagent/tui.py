@@ -65,6 +65,7 @@ if TYPE_CHECKING:
 
 class PromptInput(Input):
     """Custom Input that doesn't clutter the footer and respects app-level shortcuts."""
+    can_focus = True
     BINDINGS = [
         Binding("ctrl+e", "app.toggle_sidebar", "Process"),
         Binding("ctrl+k", "app.copy_mode", "Selection"),
@@ -94,11 +95,13 @@ class SettingsModal(ModalScreen):
     Button { margin: 0 1; }
     """
     def compose(self) -> ComposeResult:
-        from myagent.config.auth import get_claude_model, get_gemini_model, CLAUDE_MODELS, GEMINI_MODELS
+        from myagent.config.auth import get_claude_model, get_gemini_model
+        from myagent.models import CLAUDE_CURATED, GEMINI_CURATED
+        
         yield Grid(
             Label("🔧 SETTINGS", id="modal-title"),
-            Horizontal(Label("Claude Model:"), Select([(m, m) for m in CLAUDE_MODELS], value=get_claude_model(), id="claude-model"), classes="setting-row"),
-            Horizontal(Label("Gemini Model:"), Select([(m, m) for m in GEMINI_MODELS], value=get_gemini_model(), id="gemini-model"), classes="setting-row"),
+            Horizontal(Label("Claude Model:"), Select([(m.id, m.id) for m in CLAUDE_CURATED], value=get_claude_model(), id="claude-model"), classes="setting-row"),
+            Horizontal(Label("Gemini Model:"), Select([(m.id, m.id) for m in GEMINI_CURATED], value=get_gemini_model(), id="gemini-model"), classes="setting-row"),
             Horizontal(Label("Auto-Approve:"), Checkbox(value=True, id="auto-approve"), classes="setting-row"),
             Horizontal(Label("Dry Run Mode:"), Checkbox(value=False, id="dry-run"), classes="setting-row"),
             Horizontal(Button("Save", variant="success", id="save-settings"), Button("Cancel", variant="error", id="cancel-settings"), id="button-row"),
@@ -228,6 +231,7 @@ class MyAgentApp(App):
     #pipeline-status { margin-bottom: 1; }
     #autocomplete { display: none; max-height: 10; border: solid $primary; background: $panel; }
     #input-container { height: 3; dock: bottom; border-top: solid $primary; padding: 0 1; }
+    Input { border: none; background: $surface; width: 1fr; }
     .input-prompt { color: $primary; text-style: bold; width: 4; }
     Footer { background: $surface; }
     """
@@ -280,7 +284,7 @@ class MyAgentApp(App):
         self.log_message(Text(_BANNER, style="bold #c084fc"))
         self.log_message(Text.assemble(("  v2.0.0  ·  ", "dim"), ("◆ ", "bold #D97706"), ("Claude", "bold #D97706"), (" plans  ·  ", "dim"), ("✦ ", "bold #4285F4"), ("Gemini", "bold #E8EAED"), (" executes\n", "dim")))
         self.log_message(Text.assemble(("  ◆ ", "#D97706"), (get_claude_model(), "#D97706"), ("  ✦ ", "#4285F4"), (get_gemini_model(), "#E8EAED"), ("\n", "")))
-        self.query_one("#user-input").focus()
+        self.query_one("#user-input", PromptInput).focus()
 
     def log_message(self, renderable: Any) -> None:
         self.chat_log.mount(Static(renderable))
@@ -290,11 +294,15 @@ class MyAgentApp(App):
     async def handle_input(self, event: Input.Submitted) -> None:
         text = event.value.strip()
         if not text: return
+        
+        inp = self.query_one("#user-input", PromptInput)
+        
         if self._approval_event and not self._approval_event.is_set():
-            event.input.value = ""
+            inp.value = ""
             self._approval_result = text.lower() in ("y", "yes", "ok", "")
             self._approval_event.set(); return
-        event.input.value = ""
+            
+        inp.value = ""
         if text.startswith("/"):
             parts = text[1:].split(maxsplit=1)
             await self._cmd(parts[0].lower(), parts[1] if len(parts) > 1 else "")

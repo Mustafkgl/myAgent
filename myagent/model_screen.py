@@ -1,5 +1,6 @@
 """
-ModelScreen — Textual full-screen model selection for Claude and Gemini.
+ModelScreen — Textual full-screen model selection for Planner and Worker.
+Allows selecting ANY model (Claude or Gemini) for either role.
 """
 
 from __future__ import annotations
@@ -10,18 +11,12 @@ import os
 from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import VerticalScroll, Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Label, RadioButton, RadioSet, Static
+from textual.widgets import Button, Footer, Header, RadioButton, RadioSet, Static
 
 from myagent.config.auth import get_claude_model, get_gemini_model, save_config
-from myagent.models import (
-    CLAUDE_CURATED, CLAUDE_DEFAULT,
-    GEMINI_CURATED, GEMINI_DEFAULT,
-    ModelInfo,
-    fetch_claude_models, fetch_gemini_models,
-)
-from myagent.ui import C_CLAUDE, C_DIM, C_GEMINI, C_OK
+from myagent.models import fetch_all_models, ModelInfo
 
 
 def _radio_select(radio_set: RadioSet, index: int) -> None:
@@ -30,170 +25,115 @@ def _radio_select(radio_set: RadioSet, index: int) -> None:
         buttons[index].value = True
 
 
-def _model_label(m: ModelInfo, current_id: str) -> str:
-    rec = "  ★" if m.is_recommended else ""
-    cur = "  (mevcut)" if m.id == current_id else ""
-    return f"{m.id}{rec}{cur}  —  {m.description}"
-
-
 class ModelScreen(Screen):
     BINDINGS = [
-        ("escape", "app.pop_screen", "İptal"),
-        ("ctrl+s",  "save",          "Kaydet"),
+        ("escape", "app.pop_screen", "Cancel"),
+        ("ctrl+s", "save", "Save"),
     ]
 
     CSS = """
     ModelScreen { background: $surface; }
-
     #model-scroll { padding: 1 4; }
-
-    .model-title {
-        text-style: bold;
-        color: $primary;
-        margin-top: 1;
-    }
-
-    .model-subtitle { margin-bottom: 1; }
-
-    .nav-hint { margin-bottom: 1; }
-
-    RadioSet {
-        margin: 0 0 1 2;
-        width: auto;
-        max-width: 80;
-    }
-
-    .loading { margin: 0 0 1 2; }
-
-    .save-btn {
-        margin-top: 2;
-        margin-bottom: 1;
-        width: 30;
-    }
-
-    .divider { margin: 1 0; }
+    .model-title { text-style: bold; color: $primary; margin-top: 1; }
+    .nav-hint { margin-bottom: 1; color: $text-muted; }
+    RadioSet { margin: 0 0 1 2; width: auto; max-width: 80; }
+    .loading { margin: 0 1 1 2; color: $text-muted; }
+    .save-btn { margin-top: 2; margin-bottom: 1; width: 30; align-horizontal: center; }
+    .divider { margin: 1 0; border-bottom: solid $primary; }
     """
 
     def compose(self) -> ComposeResult:
         yield Header()
         with VerticalScroll(id="model-scroll"):
-            yield Static("Model Seçimi", classes="model-title")
-            yield Static(
-                "  ↑ ↓ model değiştir  ·  Tab sonraki bölüm  ·  ★ önerilen model\n",
-                classes="nav-hint",
-            )
+            yield Static("Universal Model Selection", classes="model-title")
+            yield Static("  You can now cross-mix models. Choose the 'Brain' and the 'Hands'.\n", classes="nav-hint")
 
-            # ── Claude ────────────────────────────────────────────────────────
-            yield Static(
-                f"PLANLAYAN  —  Claude  [dim]( ↑ ↓ ile seç )[/dim]",
-                classes="model-title",
-            )
-            yield Static("  Modeller yükleniyor…", id="claude-loading", classes="loading")
-            yield RadioSet(id="claude-radio")
+            # ── Planner (Brain) ──
+            yield Static("STRATEGIC PLANNER  —  The Brain", classes="model-title")
+            yield Static("  Loading latest models from APIs...", id="planner-loading", classes="loading")
+            yield RadioSet(id="planner-radio")
 
-            yield Static("─" * 60, classes="divider")
+            yield Static(" " * 60, classes="divider")
 
-            # ── Gemini ────────────────────────────────────────────────────────
-            yield Static(
-                f"ÇALIŞAN  —  Gemini  [dim]( ↑ ↓ ile seç · Tab ile bu bölüme geç )[/dim]",
-                classes="model-title",
-            )
-            yield Static("  Modeller yükleniyor…", id="gemini-loading", classes="loading")
-            yield RadioSet(id="gemini-radio")
+            # ── Worker (Hands) ──
+            yield Static("EXECUTION WORKER  —  The Hands", classes="model-title")
+            yield Static("  Loading latest models from APIs...", id="worker-loading", classes="loading")
+            yield RadioSet(id="worker-radio")
 
-            yield Button("  Kaydet ve Devam Et  ", id="save-btn", classes="save-btn", variant="success")
+            yield Button("Save and Apply Configuration", id="save-btn", classes="save-btn", variant="success")
 
         yield Footer()
 
-    # ── Mount ─────────────────────────────────────────────────────────────────
-
     def on_mount(self) -> None:
-        self._current_claude = get_claude_model()
-        self._current_gemini = get_gemini_model()
-        self._claude_models: list[ModelInfo] = []
-        self._gemini_models: list[ModelInfo] = []
-        self._load_models()
+        self._current_planner = get_claude_model()
+        self._current_worker = get_gemini_model()
+        self._all_models: list[ModelInfo] = []
+        self._load_live_models()
 
     @work(thread=True)
-    def _load_models(self) -> None:
-        claude_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        gemini_key = os.environ.get("GEMINI_API_KEY", os.environ.get("GOOGLE_API_KEY", ""))
+    def _load_live_models(self) -> None:
+        """Fetch all models from APIs in a background thread."""
+        try:
+            models = fetch_all_models()
+            self.app.call_from_thread(self._populate_ui, models)
+        except Exception:
+            pass
 
-        claude_models = fetch_claude_models(claude_key) if claude_key else CLAUDE_CURATED
-        gemini_models = fetch_gemini_models(gemini_key) if gemini_key else GEMINI_CURATED
+    def _populate_ui(self, models: list[ModelInfo]) -> None:
+        self._all_models = models
+        
+        # UI Elements
+        p_load = self.query_one("#planner-loading", Static)
+        w_load = self.query_one("#worker-loading", Static)
+        p_radio = self.query_one("#planner-radio", RadioSet)
+        w_radio = self.query_one("#worker-radio", RadioSet)
 
-        self.app.call_from_thread(self._populate_claude, claude_models)
-        self.app.call_from_thread(self._populate_gemini, gemini_models)
+        p_load.display = False
+        w_load.display = False
 
-    def _populate_claude(self, models: list[ModelInfo]) -> None:
-        self._claude_models = models
-        loading = self.query_one("#claude-loading", Static)
-        radio   = self.query_one("#claude-radio", RadioSet)
-
-        loading.display = False
-        radio.clear_options() if hasattr(radio, "clear_options") else None
-
+        # Mount radio buttons for both sets
         for m in models:
-            radio.mount(RadioButton(_model_label(m, self._current_claude)))
+            provider_icon = "🟣" if m.provider == "claude" else "🔵"
+            label = f"{provider_icon} {m.id}"
+            
+            # Add to Planner
+            p_radio.mount(RadioButton(label, id=f"p-{m.id}"))
+            # Add to Worker
+            w_radio.mount(RadioButton(label, id=f"w-{m.id}"))
 
-        self.call_after_refresh(lambda: self._init_claude_selection(models))
+        # Set initial selections
+        self.call_after_refresh(self._set_initial_selections)
 
-    def _populate_gemini(self, models: list[ModelInfo]) -> None:
-        self._gemini_models = models
-        loading = self.query_one("#gemini-loading", Static)
-        radio   = self.query_one("#gemini-radio", RadioSet)
+    def _set_initial_selections(self) -> None:
+        ids = [m.id for m in self._all_models]
+        
+        # Planner
+        p_idx = ids.index(self._current_planner) if self._current_planner in ids else 0
+        _radio_select(self.query_one("#planner-radio", RadioSet), p_idx)
 
-        loading.display = False
-        radio.clear_options() if hasattr(radio, "clear_options") else None
-
-        for m in models:
-            radio.mount(RadioButton(_model_label(m, self._current_gemini)))
-
-        self.call_after_refresh(lambda: self._init_gemini_selection(models))
-
-    def _init_claude_selection(self, models: list[ModelInfo]) -> None:
-        ids = [m.id for m in models]
-        idx = ids.index(self._current_claude) if self._current_claude in ids else 0
-        rec = next((i for i, m in enumerate(models) if m.is_recommended), 0)
-        _radio_select(self.query_one("#claude-radio", RadioSet), idx if idx >= 0 else rec)
-        self.query_one("#claude-radio", RadioSet).focus()
-
-    def _init_gemini_selection(self, models: list[ModelInfo]) -> None:
-        ids = [m.id for m in models]
-        idx = ids.index(self._current_gemini) if self._current_gemini in ids else 0
-        rec = next((i for i, m in enumerate(models) if m.is_recommended), 0)
-        _radio_select(self.query_one("#gemini-radio", RadioSet), idx if idx >= 0 else rec)
-
-    # ── Save ──────────────────────────────────────────────────────────────────
+        # Worker
+        w_idx = ids.index(self._current_worker) if self._current_worker in ids else 0
+        _radio_select(self.query_one("#worker-radio", RadioSet), w_idx)
+        
+        self.query_one("#planner-radio", RadioSet).focus()
 
     @on(Button.Pressed, "#save-btn")
-    def save_pressed(self) -> None:
-        self.action_save()
-
     def action_save(self) -> None:
-        claude_idx  = self.query_one("#claude-radio", RadioSet).pressed_index or 0
-        gemini_idx  = self.query_one("#gemini-radio", RadioSet).pressed_index or 0
+        p_idx = self.query_one("#planner-radio", RadioSet).pressed_index or 0
+        w_idx = self.query_one("#worker-radio", RadioSet).pressed_index or 0
 
-        claude_model = (
-            self._claude_models[claude_idx].id
-            if self._claude_models and claude_idx < len(self._claude_models)
-            else CLAUDE_DEFAULT
-        )
-        gemini_model = (
-            self._gemini_models[gemini_idx].id
-            if self._gemini_models and gemini_idx < len(self._gemini_models)
-            else GEMINI_DEFAULT
-        )
+        planner_id = self._all_models[p_idx].id
+        worker_id = self._all_models[w_idx].id
 
-        save_config({"claude_model": claude_model, "gemini_model": gemini_model})
+        # Update Config
+        save_config({
+            "claude_model": planner_id,
+            "gemini_model": worker_id
+        })
 
-        # Apply immediately to running session
-        os.environ["CLAUDE_MODEL"] = claude_model
-        os.environ["GEMINI_MODEL"] = gemini_model
+        # Update Runtime Environment
+        os.environ["CLAUDE_MODEL"] = planner_id
+        os.environ["GEMINI_MODEL"] = worker_id
 
-        self.app.notify(
-            f"✓ Claude: {claude_model}  ·  Gemini: {gemini_model}",
-            severity="information",
-            timeout=4,
-        )
+        self.app.notify(f"✓ Configured: Planner={planner_id} | Worker={worker_id}", severity="information")
         self.app.pop_screen()

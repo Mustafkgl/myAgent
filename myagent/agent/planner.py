@@ -200,10 +200,10 @@ def _plan_via_cli(task: str, stream_callback=None, roadmap: bool = False) -> str
     from myagent.config.auth import get_claude_model
     model = get_claude_model()
     cmd = ["claude", "-p", task, "--model", model]
-    if roadmap: cmd.extend(["--max-steps", "1"])
     out = run_claude_cli(cmd, task, model, timeout=120, stream_callback=stream_callback)
-    if is_error(out):
-        raise RuntimeError(out) # Will be caught and parsed in plan()
+    if is_error(out): raise RuntimeError("Claude CLI planning failed.")
+    return out
+
     return out
 
 

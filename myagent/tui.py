@@ -265,7 +265,7 @@ class MyAgentApp(App):
     #sidebar-title { text-align: center; text-style: bold; width: 100%; background: $primary; color: white; margin-bottom: 1; }
     #pipeline-status { margin-bottom: 1; min-height: 2; }
     #pipeline-logs { color: $text-disabled; }
-    #autocomplete { display: none; max-height: 10; border: solid $primary; background: $panel; z-index: 10; }
+    #autocomplete { display: none; max-height: 10; border: solid $primary; background: $panel; }
     #input-container { height: 3; dock: bottom; border-top: solid $primary; padding: 0 1; }
     Input { border: none; background: $surface; width: 1fr; }
     .input-prompt { color: $primary; text-style: bold; width: 4; }

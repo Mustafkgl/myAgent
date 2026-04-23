@@ -96,10 +96,10 @@ class ModelScreen(Screen):
             provider_icon = "🟣" if m.provider == "claude" else "🔵"
             label = f"{provider_icon} {m.id}"
             
-            # Add to Planner
-            p_radio.mount(RadioButton(label, id=f"p-{m.id}"))
-            # Add to Worker
-            w_radio.mount(RadioButton(label, id=f"w-{m.id}"))
+            # Textual IDs cannot contain dots! Replace dots with underscores.
+            safe_id = m.id.replace(".", "_")
+            p_radio.mount(RadioButton(label, id=f"p-{safe_id}"))
+            w_radio.mount(RadioButton(label, id=f"w-{safe_id}"))
 
         # Set initial selections
         self.call_after_refresh(self._set_initial_selections)
@@ -119,8 +119,11 @@ class ModelScreen(Screen):
 
     @on(Button.Pressed, "#save-btn")
     def action_save(self) -> None:
-        p_idx = self.query_one("#planner-radio", RadioSet).pressed_index or 0
-        w_idx = self.query_one("#worker-radio", RadioSet).pressed_index or 0
+        p_idx = self.query_one("#planner-radio", RadioSet).pressed_index
+        w_idx = self.query_one("#worker-radio", RadioSet).pressed_index
+        
+        if p_idx is None: p_idx = 0
+        if w_idx is None: w_idx = 0
 
         planner_id = self._all_models[p_idx].id
         worker_id = self._all_models[w_idx].id

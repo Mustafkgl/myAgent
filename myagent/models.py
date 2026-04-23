@@ -35,6 +35,14 @@ GEMINI_CURATED: list[ModelInfo] = [
 
 
 # ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+
+CLAUDE_DEFAULT = "claude-3-5-sonnet-20240620"
+GEMINI_DEFAULT = "gemini-2.0-flash"
+
+
+# ---------------------------------------------------------------------------
 # Live Discovery
 # ---------------------------------------------------------------------------
 
@@ -79,7 +87,25 @@ def fetch_all_models() -> list[ModelInfo]:
     return sorted(list(unique.values()), key=lambda x: (x.provider, x.id))
 
 
-def resolve_model(name: str) -> str:
-    """Pass-through resolver or alias matcher."""
-    # Logic remains similar but supports universal resolution
+def resolve_model(name: str, provider: str = "claude") -> str:
+    """Resolve *name* to a full model ID for *provider*.
+    If it's an exact match for an existing ID, return it.
+    If it's an alias, return the full ID.
+    Otherwise, return the name as-is.
+    """
+    curated = CLAUDE_CURATED if provider == "claude" else GEMINI_CURATED
+    lower = name.lower().strip()
+    
+    # 1. Exact ID match
+    for m in curated:
+        if m.id.lower() == lower: return m.id
+    
+    # 2. Alias match
+    for m in curated:
+        if any(a.lower() == lower for a in m.aliases): return m.id
+    
+    # 3. Substring match
+    for m in curated:
+        if lower in m.id.lower(): return m.id
+        
     return name

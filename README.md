@@ -1,99 +1,129 @@
+# 🤖 myAgent v2.0 — The "Conscious Asymmetry" Assistant
 
-<div align="center">
+[![Version](https://img.shields.io/badge/version-2.0.0--beta-blueviolet?style=for-the-badge)](https://github.com/Mustafkgl/myAgent)
+[![Architecture](https://img.shields.io/badge/Architecture-Level%202%20Clean-emerald?style=for-the-badge)](https://github.com/Mustafkgl/myAgent/tree/clean_architect)
+[![Provider](https://img.shields.io/badge/Providers-Claude%20%26%20Gemini-orange?style=for-the-badge)](https://github.com/Mustafkgl/myAgent)
 
-<img src="banner.png" alt="myAgent" width="672"/>
-
-### Claude Düşünür — Gemini Çalışır — Siz Sadece Hedeflersiniz
-
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![Claude](https://img.shields.io/badge/Brain-Claude%203.5-c084fc?style=flat-square)
-![Gemini](https://img.shields.io/badge/Hands-Gemini%202.0-4285F4?style=flat-square)
-![Efficiency](https://img.shields.io/badge/Efficiency-90%25%20Saving-green?style=flat-square)
-![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
-
-**myAgent**, dünyanın en gelişmiş iki yapay zeka modelini tek bir otonom döngüde birleştiren, **Enterprise-Grade** (kurumsal seviye) bir AI Terminal asistanıdır.
-
-</div>
-
----
-
-## 📄 Teknik Veri Sayfası (Technical Data Sheet)
-
-| Kategori | Özellik | Detay |
-|---|---|---|
-| **Mimari** | Asimetrik Hibrit | Claude 3.5 (Brain) + Gemini 2.0 (Hands) |
-| **Döngü Hızı** | Otonom Faz 6 | Gözlem -> Re-Plan -> Uygulama (Hata anında otonom sapma yönetimi) |
-| **Bağlam Yönetimi** | Deep Search (rg) | `ripgrep` entegrasyonu ile 100k+ dosya arasında milisaniyelik semantik bağlam bulma |
-| **Dayanıklılık** | Immortality Patch | I/O hatalarına (IsADirectoryError, PermissionError) karşı bağışıklık ve otonom düzeltme |
-| **Arayüz** | Next-Gen TUI | Textual tabanlı, responsive, 3 panelli IDE deneyimi |
-| **Güvenlik** | Dual-Layer Sandbox | Host seviyesinde komut filtreleme + Docker izolasyonu |
-
----
-
-## 💰 Tasarruf ve ROI (Yatırım Getirisi) Raporu
-
-myAgent, "Bilinçli Asimetri" prensibiyle çalışır. Devasa kod bloklarını ve terminal çıktılarını (Hands) düşük maliyetli Gemini'ye, stratejik kararları (Brain) ise Claude'a bırakır.
-
-### Stres Testi Verileri (20 Nisan 2026 Seansı)
-*   **Gerçekleştirilen Görevler:** Redis Klonu (Async), C++ Entegrasyonu, Distributed Task Queue, Core Async Refactor.
-*   **Üretilen Kod Hacmi:** ~25,000+ satır.
-*   **Bağlam (Context) İşleme:** ~2.5M+ Gemini Token.
-
-| Metrik | Claude Code (Tahmini) | myAgent (Gerçek) | Fark |
-|---|---|---|---|
-| **Maliyet** | ~$45.00 | **~$0.75** | **%98.3 Tasarruf** |
-| **Zeka** | %100 Claude | %100 Claude (Strateji) | Aynı Zeka Seviyesi |
-| **Hız** | 5-10 dk (Döngülerle) | 1.5 - 3 dk | **%300 Daha Hızlı** |
-
----
-
-## 🧠 Otonom Güç: Aşama 6 Döngüsü
-
-myAgent artık sadece kod yazmıyor, projenizi bir mühendis gibi "araştırıyor" ve "hata yapınca durup düşünüyor".
-
-<div align="center">
-  <img src="docs/feature_autonomy.svg" width="400" alt="Otonom Döngü"/>
-  <img src="docs/feature_search.svg" width="400" alt="Derin Arama"/>
-</div>
-
-- **Deep Search:** `ripgrep` ile nokta atışı dosya bulma.
-- **Observation:** Gemini'nin karşılaştığı engelleri (eksik kütüphane vb.) Claude'a raporlaması.
-- **Self-Healing:** Linter ve Test hatalarını geçene kadar otonom olarak düzeltme.
-
----
-
-## ⌨️ Klavye Kısayolları (TUI Edition)
-
-| Tuş | Fonksiyon | Önem |
-|---|---|---|
-| **`Ctrl+B`** | **Files (Dosya Gezgini)** | Proje yapısını anlık izleme ve gezinme. |
-| **`Ctrl+E`** | **Process (İşlem Takibi)** | Claude'un adımlarını ve Gemini'nin loglarını izleme. |
-| **`Ctrl+K`** | **Selection (Kelime Seçim)** | Terminalin ötesinde, cerrahi hassasiyette metin kopyalama. |
-| **`Ctrl+S`** | **Settings (Ayarlar)** | Uygulamadan çıkmadan model ve API anahtarı yönetimi. |
-| `Ctrl+Y` | Copy Last Answer | En son Claude cevabını anında panoya al. |
-
----
-
-## 📦 Kurulum ve Güçlü Modlar
-
-### 🐳 Docker (Maximum Otonomi & Güvenlik)
-*Bu modda ajan `g++`, `sed`, `mkdir` gibi komutları tam yetkiyle ama izole şekilde kullanır.*
-
-```bash
-docker compose build
-./run.sh
+```text
+                              █████████
+                             ███░░░░░███
+ █████████████   █████ ████ ░███    ░███   ███████  ██████  ████████   █████
+░░███░░███░░███ ░░███ ░███  ░███████████  ███░░███ ███░░███░░███░░███ ░░███
+ ░███ ░███ ░███  ░███ ░███  ░███░░░░░███ ░███ ░███░███████  ░███ ░███ ███████
+ ░███ ░███ ░███  ░███ ░███  ░███    ░███ ░███ ░███░███░░░   ░███ ░███░░░███░
+ █████░███ █████ ░░███████  █████   █████░░███████░░██████  ████ ████  ░███
+░░░░░ ░░░ ░░░░░   ░░░░░███ ░░░░░   ░░░░░  ░░░░░███ ░░░░░░  ░░░░ ░░░░░  ░███ ███
+                  ███ ░███                ███ ░███                     ░░█████
+                 ░░██████                ░░██████                       ░░░░░
+                  ░░░░░░                  ░░░░░░
 ```
 
-### 🐍 Yerel (Hızlı Başlangıç)
-```bash
-pip install -e .
-python -m myagent
-```
+## 🌌 The Philosophy: Conscious Asymmetry
 
-<div align="center">
+**myAgent** is built on a unique architectural signature: **Conscious Asymmetry**. Instead of using a single LLM for everything, we split the labor based on biological and cognitive strengths:
+
+-   🧠 **The Brain (Claude-3.5-Opus/Sonnet):** Orchestrates logic, performs deep codebase research, and builds deterministic step-by-step plans.
+-   🛠️ **The Hands (Gemini-2.5-Flash/Pro):** High-speed execution, complex tool usage, and real-time response generation.
+
+By forcing a **JSON Contract** between the Brain and the Hands, we eliminate "hallucination drift" and achieve enterprise-grade reliability.
 
 ---
 
-*Claude Düşünür. Gemini Çalışır. myAgent Yönetir.*
+## 🏗️ Level 2 Clean Architecture
 
-</div>
+The `clean_architect` branch introduces a robust **Finite State Machine (FSM)** that drives the entire lifecycle of a task.
+
+### System Flow
+```mermaid
+graph TD
+    A[User Input] --> B{Brain: Planning Phase}
+    B -- Massive Task? --> C[Recursive Roadmap Generation]
+    B -- Normal Task? --> D[Deterministic Step List]
+    C --> D
+    D --> E{Hands: Execution Phase}
+    E -- Observation? --> B
+    E -- Success? --> F[Summary Phase]
+    E -- Error? --> G[Self-Healing Loop]
+    G --> B
+    F --> H[Final Report]
+```
+
+---
+
+## 🚀 Key Features
+
+### 🖥️ Next-Gen TUI
+A highly responsive Terminal User Interface built with `Textual`. 
+- **Live Process Tracking:** Watch Claude and Gemini think in real-time in the sidebar.
+- **Responsive Design:** Zero-flicker UI that adapts to terminal resizing.
+- **Integrated Sidebar:** Interactive directory tree and session history.
+
+### 📡 Sustainable Model Discovery
+Forget hardcoded lists. myAgent stays updated with the AI industry **autonomously**.
+- **Live Sync:** Fetches the latest models (like Opus 4.7 or Gemini 3.1) directly from Anthropic and Google APIs on every launch.
+- **Hybrid Selection:** Mix and match any model for any role via the `/model` screen.
+
+### 📓 Black Box Recorder
+Enterprise-grade traceability via `~/.myagent/myagent_debug.log`.
+- Every state transition, every raw JSON payload, and every bash command is timestamped and mühürlendi.
+- If it fails, the log tells you **exactly** why.
+
+---
+
+## 🛠️ Usage & Commands
+
+### Slash Commands (Inside TUI)
+| Command | Description |
+| :--- | :--- |
+| `/sessions` | List and manage your previous chat history. |
+| `/load <id>` | Instantly restore a previous session. |
+| `/model` | Dynamic screen to choose your Brain and Hands. |
+| `/auth` | Update API keys with built-in **Connection Testing**. |
+| `/doctor` | Run system-wide diagnostics and health checks. |
+| `/clear` | Wipe the terminal screen for a fresh start. |
+
+### Terminal Flags
+```bash
+myagent "task"             # Starts TUI mode
+myagent --no-tui "task"    # Direct terminal output mode (REPL)
+myagent --verbose          # Shows raw model outputs and debug info
+```
+
+---
+
+## 🐳 Getting Started (Docker-First)
+
+The most stable way to run myAgent is inside our optimized Docker environment.
+
+1.  **Clone the Architecture:**
+    ```bash
+    git clone https://github.com/Mustafkgl/myAgent.git
+    cd myAgent
+    git checkout clean_architect
+    ```
+
+2.  **Build the Beast:**
+    ```bash
+    docker compose build
+    ```
+
+3.  **Awaken the Agent:**
+    ```bash
+    ./run.sh
+    ```
+
+4.  **Configure:** Type `/auth` inside the TUI to mühürle your API keys and test the connection.
+
+---
+
+## 🛡️ Security & Safety
+- **Path Traversal Protection:** Executor validates all file writes against the workspace root.
+- **Subprocess Isolation:** Bash commands run in a restricted environment with timeouts.
+- **Credential Protection:** Secrets are never logged and are stored securely in `config.json`.
+
+---
+
+<p align="center">
+  <i>"Conscious Asymmetry is not just a pattern, it's the future of AI-Human collaboration."</i><br>
+  <b>Built with ❤️ by Mustafa</b>
+</p>

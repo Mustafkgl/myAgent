@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from typing import Any
+from myagent.utils.logger import log
 
 @dataclass
 class ModelInfo:
@@ -18,7 +19,7 @@ class ModelInfo:
 
 
 # ---------------------------------------------------------------------------
-# Fallback Curated Models (When API discovery fails)
+# Fallback Curated Models (Hardcoded defaults if API discovery fails)
 # ---------------------------------------------------------------------------
 
 CLAUDE_CURATED: list[ModelInfo] = [
@@ -33,11 +34,6 @@ GEMINI_CURATED: list[ModelInfo] = [
     ModelInfo("gemini-1.5-flash", ["1.5-flash"], "High throughput, low latency", "gemini"),
 ]
 
-
-# ---------------------------------------------------------------------------
-# Defaults
-# ---------------------------------------------------------------------------
-
 CLAUDE_DEFAULT = "claude-3-5-sonnet-20240620"
 GEMINI_DEFAULT = "gemini-2.0-flash"
 
@@ -47,65 +43,71 @@ GEMINI_DEFAULT = "gemini-2.0-flash"
 # ---------------------------------------------------------------------------
 
 def fetch_all_models() -> list[ModelInfo]:
-    """Fetch live models from both Anthropic and Google APIs."""
-    all_models = []
+    """Fetch live models from both Anthropic and Google APIs with detailed logging."""
+    log.info("Starting live model discovery...")
+    all_models: list[ModelInfo] = []
     
-    # Try Claude API
+    # --- Try Claude API ---
     api_key_c = os.environ.get("ANTHROPIC_API_KEY", "")
     if api_key_c:
         try:
+            log.debug("Fetching models from Anthropic API...")
             import anthropic
             client = anthropic.Anthropic(api_key=api_key_c)
-            # Fetch and wrap
             for m in client.models.list().data:
-                all_models.append(ModelInfo(m.id, [], "(Direct from API)", "claude"))
-        except Exception: pass
-    
-    if not any(m.provider == "claude" for m in all_models):
-        all_models.extend(CLAUDE_CURATED)
+                all_models.append(ModelInfo(m.id, [], "(API)", "claude"))
+            log.info(f"Successfully fetched {len(all_models)} models from Anthropic.")
+        except Exception as e:
+            log.warning(f"Anthropic API discovery failed: {str(e)}")
+    else:
+        log.debug("ANTHROPIC_API_KEY not found in environment.")
 
-    # Try Gemini API
+    # --- Try Gemini API ---
     api_key_g = os.environ.get("GEMINI_API_KEY", os.environ.get("GOOGLE_API_KEY", ""))
     if api_key_g:
         try:
+            log.debug("Fetching models from Google AI API...")
             import google.generativeai as genai
             genai.configure(api_key=api_key_g)
+            g_count = 0
             for m in genai.list_models():
                 if "generateContent" in getattr(m, "supported_generation_methods", []):
                     mid = m.name.replace("models/", "")
-                    all_models.append(ModelInfo(mid, [], "(Direct from API)", "gemini"))
-        except Exception: pass
+                    all_models.append(ModelInfo(mid, [], "(API)", "gemini"))
+                    g_count += 1
+            log.info(f"Successfully fetched {g_count} models from Google AI.")
+        except Exception as e:
+            log.warning(f"Google AI API discovery failed: {str(e)}")
+    else:
+        log.debug("GEMINI_API_KEY/GOOGLE_API_KEY not found in environment.")
 
-    if not any(m.provider == "gemini" for m in all_models):
-        all_models.extend(GEMINI_CURATED)
-
-    # Remove duplicates by ID
-    unique = {}
-    for m in all_models:
-        unique[m.id] = m
+    # --- Fallback/Safety Layer ---
+    # Ensure our curated models are ALWAYS present even if API fails or returns partial list
+    seen_ids = {m.id for m in all_models}
     
-    return sorted(list(unique.values()), key=lambda x: (x.provider, x.id))
+    for cm in CLAUDE_CURATED:
+        if cm.id not in seen_ids:
+            all_models.append(cm)
+            seen_ids.add(cm.id)
+            
+    for gm in GEMINI_CURATED:
+        if gm.id not in seen_ids:
+            all_models.append(gm)
+            seen_ids.add(gm.id)
+
+    # --- Final Polish ---
+    # Sort by provider (claude first for style) then by id
+    result = sorted(all_models, key=lambda x: (0 if x.provider == "claude" else 1, x.id))
+    log.info(f"Model discovery complete. Total unique models: {len(result)}")
+    return result
 
 
 def resolve_model(name: str, provider: str = "claude") -> str:
-    """Resolve *name* to a full model ID for *provider*.
-    If it's an exact match for an existing ID, return it.
-    If it's an alias, return the full ID.
-    Otherwise, return the name as-is.
-    """
+    """Resolve *name* to a full model ID for *provider*."""
     curated = CLAUDE_CURATED if provider == "claude" else GEMINI_CURATED
     lower = name.lower().strip()
-    
-    # 1. Exact ID match
     for m in curated:
         if m.id.lower() == lower: return m.id
-    
-    # 2. Alias match
-    for m in curated:
         if any(a.lower() == lower for a in m.aliases): return m.id
-    
-    # 3. Substring match
-    for m in curated:
         if lower in m.id.lower(): return m.id
-        
     return name

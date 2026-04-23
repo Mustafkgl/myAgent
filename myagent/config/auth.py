@@ -77,6 +77,45 @@ def save_config(config: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Detection Helpers
+# ---------------------------------------------------------------------------
+
+def detect_claude() -> list[AuthMode]:
+    """Return available auth modes for Claude."""
+    modes: list[AuthMode] = []
+    if ANTHROPIC_API_KEY: modes.append(API)
+    if _claude_cli_ready(): modes.append(CLI)
+    return modes
+
+
+def detect_gemini() -> list[AuthMode]:
+    """Return available worker backends."""
+    modes: list[AuthMode] = []
+    if GEMINI_API_KEY: modes.append(API)
+    if _gemini_cli_ready(): modes.append(CLI)
+    if _claude_cli_ready(): modes.append(CLAUDE_WORKER)
+    return modes
+
+
+def _claude_cli_ready() -> bool:
+    if not shutil.which("claude"): return False
+    if not (Path.home() / ".claude").exists(): return False
+    try:
+        r = subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=5)
+        return r.returncode == 0
+    except Exception: return False
+
+
+def _gemini_cli_ready() -> bool:
+    if not shutil.which("gemini"): return False
+    if not (Path.home() / ".gemini").exists(): return False
+    try:
+        r = subprocess.run(["gemini", "--version"], capture_output=True, text=True, timeout=5)
+        return r.returncode == 0
+    except Exception: return False
+
+
+# ---------------------------------------------------------------------------
 # Getters (override > config > env/disk default)
 # ---------------------------------------------------------------------------
 

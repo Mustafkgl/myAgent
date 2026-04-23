@@ -1,10 +1,13 @@
 """
 Model registry: curated model lists, alias resolution, and LIVE API discovery.
+Automatically syncs with Anthropic and Google APIs to find the latest models.
 """
 
 from __future__ import annotations
 
 import os
+import json
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 from myagent.utils.logger import log
@@ -31,11 +34,29 @@ CLAUDE_CURATED: list[ModelInfo] = [
 GEMINI_CURATED: list[ModelInfo] = [
     ModelInfo("gemini-2.0-flash", ["flash", "2.0-flash"], "Latest generation, extremely fast", "gemini", True),
     ModelInfo("gemini-1.5-pro", ["pro", "1.5-pro"], "Best for complex reasoning tasks", "gemini"),
-    ModelInfo("gemini-1.5-flash", ["1.5-flash"], "High throughput, low latency", "gemini"),
 ]
 
 CLAUDE_DEFAULT = "claude-3-5-sonnet-20240620"
 GEMINI_DEFAULT = "gemini-2.0-flash"
+
+CONFIG_PATH = Path.home() / ".myagent" / "config.json"
+
+# ---------------------------------------------------------------------------
+# Helper: Load keys from config file if environment is empty
+# ---------------------------------------------------------------------------
+
+def _get_keys() -> tuple[str, str]:
+    c_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    g_key = os.environ.get("GEMINI_API_KEY", os.environ.get("GOOGLE_API_KEY", "")).strip()
+    
+    if (not c_key or not g_key) and CONFIG_PATH.exists():
+        try:
+            data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            if not c_key: c_key = data.get("anthropic_api_key", "").strip()
+            if not g_key: g_key = data.get("gemini_api_key", "").strip()
+        except Exception: pass
+        
+    return c_key, g_key
 
 
 # ---------------------------------------------------------------------------
@@ -43,67 +64,54 @@ GEMINI_DEFAULT = "gemini-2.0-flash"
 # ---------------------------------------------------------------------------
 
 def fetch_all_models() -> list[ModelInfo]:
-    """Fetch live models from both Anthropic and Google APIs with detailed logging."""
-    log.info("Starting live model discovery...")
+    """Fetch live models directly from APIs to ensure total sustainability."""
+    log.info("Initiating Live Model Discovery (Direct API Sync)...")
     all_models: list[ModelInfo] = []
+    c_key, g_key = _get_keys()
     
-    # --- Try Claude API ---
-    api_key_c = os.environ.get("ANTHROPIC_API_KEY", "")
-    if api_key_c:
+    # --- Live Claude Sync ---
+    if c_key:
         try:
-            log.debug("Fetching models from Anthropic API...")
             import anthropic
-            client = anthropic.Anthropic(api_key=api_key_c)
+            client = anthropic.Anthropic(api_key=c_key)
             for m in client.models.list().data:
-                all_models.append(ModelInfo(m.id, [], "(API)", "claude"))
-            log.info(f"Successfully fetched {len(all_models)} models from Anthropic.")
+                # Filter out older models or non-text models if needed
+                all_models.append(ModelInfo(m.id, [], "(Direct API)", "claude"))
+            log.info(f"Synced {len(all_models)} models from Anthropic.")
         except Exception as e:
-            log.warning(f"Anthropic API discovery failed: {str(e)}")
-    else:
-        log.debug("ANTHROPIC_API_KEY not found in environment.")
-
-    # --- Try Gemini API ---
-    api_key_g = os.environ.get("GEMINI_API_KEY", os.environ.get("GOOGLE_API_KEY", ""))
-    if api_key_g:
+            log.warning(f"Claude API Sync failed: {e}")
+    
+    # --- Live Gemini Sync ---
+    if g_key:
         try:
-            log.debug("Fetching models from Google AI API...")
             import google.generativeai as genai
-            genai.configure(api_key=api_key_g)
-            g_count = 0
+            genai.configure(api_key=g_key)
+            initial_count = len(all_models)
             for m in genai.list_models():
                 if "generateContent" in getattr(m, "supported_generation_methods", []):
                     mid = m.name.replace("models/", "")
-                    all_models.append(ModelInfo(mid, [], "(API)", "gemini"))
-                    g_count += 1
-            log.info(f"Successfully fetched {g_count} models from Google AI.")
+                    all_models.append(ModelInfo(mid, [], "(Direct API)", "gemini"))
+            log.info(f"Synced {len(all_models) - initial_count} models from Google AI.")
         except Exception as e:
-            log.warning(f"Google AI API discovery failed: {str(e)}")
-    else:
-        log.debug("GEMINI_API_KEY/GOOGLE_API_KEY not found in environment.")
+            log.warning(f"Gemini API Sync failed: {e}")
 
-    # --- Fallback/Safety Layer ---
-    # Ensure our curated models are ALWAYS present even if API fails or returns partial list
+    # --- Deduplication and Fallback ---
     seen_ids = {m.id for m in all_models}
     
-    for cm in CLAUDE_CURATED:
-        if cm.id not in seen_ids:
-            all_models.append(cm)
-            seen_ids.add(cm.id)
-            
-    for gm in GEMINI_CURATED:
-        if gm.id not in seen_ids:
-            all_models.append(gm)
-            seen_ids.add(gm.id)
+    # Add curated models if they were missed by API for some reason
+    for fallback in CLAUDE_CURATED + GEMINI_CURATED:
+        if fallback.id not in seen_ids:
+            all_models.append(fallback)
+            seen_ids.add(fallback.id)
 
-    # --- Final Polish ---
-    # Sort by provider (claude first for style) then by id
+    # Sort: Providers together, then alphabetical
     result = sorted(all_models, key=lambda x: (0 if x.provider == "claude" else 1, x.id))
-    log.info(f"Model discovery complete. Total unique models: {len(result)}")
+    log.info(f"Sustainable Discovery Finished. Total models: {len(result)}")
     return result
 
 
 def resolve_model(name: str, provider: str = "claude") -> str:
-    """Resolve *name* to a full model ID for *provider*."""
+    """Resolve *name* to a full model ID."""
     curated = CLAUDE_CURATED if provider == "claude" else GEMINI_CURATED
     lower = name.lower().strip()
     for m in curated:

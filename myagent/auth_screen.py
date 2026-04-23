@@ -57,6 +57,19 @@ def _save_env(key: str, value: str) -> None:
     os.environ[key] = value
 
 
+def _load_env_file() -> None:
+    """Load ~/.myagent/.env into os.environ (called on startup)."""
+    if not ENV_FILE.exists():
+        return
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        if k and v and not os.environ.get(k):
+            os.environ[k] = v
+
+
 class AuthScreen(Screen):
     BINDINGS = [
         ("escape", "app.pop_screen", "Cancel"),

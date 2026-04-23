@@ -58,6 +58,10 @@ def load_config() -> dict:
     return {}
 
 
+def is_configured() -> bool:
+    return CONFIG_PATH.exists() and bool(load_config())
+
+
 def save_config(config: dict) -> None:
     """Merge *config* into disk. ENSURES keys are persisted if provided."""
     existing = load_config()
